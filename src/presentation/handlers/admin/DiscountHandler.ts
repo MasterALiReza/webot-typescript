@@ -1,23 +1,9 @@
 import { Context } from 'grammy';
-// import { prisma } from '../../../infrastructure/database/prisma';
+import { prisma } from '../../../infrastructure/database/prisma';
 import { logger } from '../../../shared/logger';
-
-// Temporary type definition - this would be in Prisma schema
-interface DiscountCode {
-    id: number;
-    code: string;
-    type: 'PERCENTAGE' | 'FIXED';
-    amount: number;
-    maxUses: number;
-    currentUses: number;
-    expiryDate: Date | null;
-    active: boolean;
-    createdAt: Date;
-}
 
 /**
  * DiscountHandler - Manage discount codes
- * Note: Requires DiscountCode model in database
  */
 export class DiscountHandler {
     /**
@@ -25,67 +11,35 @@ export class DiscountHandler {
      */
     static async handleDiscountsMenu(ctx: Context): Promise<void> {
         try {
-            const message = `
-🎟 <b>مدیریت کدهای تخفیف</b>
+            const codes = await prisma.discountCode.findMany({
+                orderBy: { createdAt: 'desc' },
+                take: 10 // Show last 10
+            });
 
-⚙️ <b>وضعیت:</b>
-این ویژگی نیازمند جدول <code>discount_codes</code> در پایگاه داده است.
+            let message = '🎟 <b>مدیریت کدهای تخفیف</b>\n\n' +
+                'لیست آخرین کدهای تخفیف:\n\n';
 
-🎯 <b>کاربرد:</b>
-• ایجاد کدهای تخفیف برای کاربران
-• تخفیف درصدی یا مبلغ ثابت
-• محدودیت تعداد استفاده
-• تاریخ انقضا
+            if (codes.length === 0) {
+                message += '❌ هیچ کد تخفیفی یافت نشد.\n';
+            } else {
+                codes.forEach((code) => {
+                    const status = code.isActive ? '✅' : '❌';
+                    message += `${status} <b>${code.code}</b>\n` +
+                        `   تخفیف: ${code.percent}%\n` +
+                        `   استفاده: ${code.usedCount}/${code.maxUses}\n` +
+                        `   /delcode_${code.id}\n\n`;
+                });
+            }
 
-📋 <b>امکانات:</b>
-• افزودن کد تخفیف جدید
-• ویرایش کد موجود
-• غیرفعال کردن کد
-• مشاهده آمار استفاده
-• حذف کد
-
-💡 <b>انواع تخفیف:</b>
-• درصدی: 10%, 20%, 50%
-• مبلغ ثابت: 5000, 10000, 50000 تومان
-
-📊 <b>مثال:</b>
-• کد: <code>SUMMER20</code>
-• نوع: درصدی
-• مقدار: 20%
-• حداکثر استفاده: 100
-• انقضا: 30 روز
-
-🔮 <b>پیاده‌سازی:</b>
-برای فعال‌سازی این ویژگی:
-
-1. جدول را به schema.prisma اضافه کنید:
-<code>
-model DiscountCode {
-  id          Int      @id @default(autoincrement())
-  code        String   @unique @db.VarChar(50)
-  type        String   @db.VarChar(20)
-  amount      Decimal  @db.Decimal(10, 2)
-  maxUses     Int      @default(0)
-  currentUses Int      @default(0)
-  expiryDate  DateTime?
-  active      Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  
-  @@map("discount_codes")
-}
-</code>
-
-2. فرم خرید را برای ورود کد تخفیف آپدیت کنید
-3. محاسبه تخفیف را در PurchaseHandler اضافه کنید
-4. از این handler برای مدیریت استفاده کنید
-            `.trim();
+            message += '\nبرای افزودن کد جدید، از دکمه زیر استفاده کنید.';
 
             await ctx.editMessageText(message, {
                 parse_mode: 'HTML',
                 reply_markup: {
-                    inline_keyboard: [[
-                        { text: '🔙 بازگشت', callback_data: 'admin:menu' },
-                    ]],
+                    inline_keyboard: [
+                        [{ text: '➕ افزودن کد تخفیف جدید', callback_data: 'admin:discount:add' }],
+                        [{ text: '🔙 بازگشت', callback_data: 'admin:menu' }],
+                    ],
                 },
             });
 
@@ -100,127 +54,96 @@ model DiscountCode {
      * Validate and apply discount code
      */
     static async applyDiscount(
-        _code: string,
-        originalPrice: number
-    ): Promise<{ valid: boolean; discountedPrice: number; message: string }> {
+        code: string,
+        _userId: number
+    ): Promise<{ valid: boolean; discountPercent: number; message: string; codeId?: number }> {
         try {
-            // This would query the database
-            // const discount = await prisma.discountCode.findUnique({
-            //     where: { code: code.toUpperCase() },
-            // });
-            //
-            // if (!discount || !discount.active) {
-            //     return { valid: false, discountedPrice: originalPrice, message: 'کد تخفیف نامعتبر است' };
-            // }
-            //
-            // if (discount.expiryDate && discount.expiryDate < new Date()) {
-            //     return { valid: false, discountedPrice: originalPrice, message: 'کد تخفیف منقضی شده' };
-            // }
-            //
-            // if (discount.maxUses > 0 && discount.currentUses >= discount.maxUses) {
-            //     return { valid: false, discountedPrice: originalPrice, message: 'ظرفیت استفاده از کد تخفیف تمام شده' };
-            // }
-            //
-            // let discountedPrice = originalPrice;
-            //
-            // if (discount.type === 'PERCENTAGE') {
-            //     discountedPrice = originalPrice * (1 - Number(discount.amount) / 100);
-            // } else if (discount.type === 'FIXED') {
-            //     discountedPrice = Math.max(0, originalPrice - Number(discount.amount));
-            // }
-            //
-            // // Increment usage count
-            // await prisma.discountCode.update({
-            //     where: { id: discount.id },
-            //     data: { currentUses: { increment: 1 } },
-            // });
-            //
-            // return {
-            //     valid: true,
-            //     discountedPrice,
-            //     message: `✅ کد تخفیف اعمال شد: ${discount.amount}${discount.type === 'PERCENTAGE' ? '%' : ' تومان'}`,
-            // };
+            const discount = await prisma.discountCode.findUnique({
+                where: { code: code }
+            });
+
+            if (!discount) {
+                return { valid: false, discountPercent: 0, message: '❌ کد تخفیف نامعتبر است' };
+            }
+
+            if (!discount.isActive) {
+                return { valid: false, discountPercent: 0, message: '❌ این کد تخفیف غیرفعال شده است' };
+            }
+
+            if (discount.maxUses > 0 && discount.usedCount >= discount.maxUses) {
+                return { valid: false, discountPercent: 0, message: '❌ ظرفیت استفاده از این کد تکمیل شده است' };
+            }
+
+            if (discount.expiresAt && discount.expiresAt < new Date()) {
+                return { valid: false, discountPercent: 0, message: '❌ مهلت استفاده از این کد به پایان رسیده است' };
+            }
+
+            // Check if user has already used this code?
+            // Schema doesn't strictly track user-code usage relation in a separate table yet, 
+            // but for simple implementation we assume global usage limit.
+            // Complex implementation would need a DiscountUsage table.
 
             return {
-                valid: false,
-                discountedPrice: originalPrice,
-                message: 'سیستم کد تخفیف هنوز پیاده‌سازی نشده است',
+                valid: true,
+                discountPercent: discount.percent,
+                message: `✅ کد تخفیف ${discount.percent}% اعمال شد!`,
+                codeId: discount.id
             };
+
         } catch (error) {
             logger.error('Error applying discount:', error);
             return {
                 valid: false,
-                discountedPrice: originalPrice,
-                message: 'خطا در اعمال کد تخفیف',
+                discountPercent: 0,
+                message: '❌ خطا در بررسی کد تخفیف'
             };
         }
     }
 
     /**
-     * Get all discount codes
+     * Increment usage count for a discount code
      */
-    static async getAllCodes(): Promise<DiscountCode[]> {
-        try {
-            // This would query the database
-            // const codes = await prisma.discountCode.findMany({
-            //     orderBy: { createdAt: 'desc' },
-            // });
-            // return codes;
-
-            return [];
-        } catch (error) {
-            logger.error('Error getting discount codes:', error);
-            return [];
-        }
+    static async incrementUsage(codeId: number) {
+        await prisma.discountCode.update({
+            where: { id: codeId },
+            data: { usedCount: { increment: 1 } }
+        });
     }
 
     /**
-     * Create new discount code
+     * Handle admin:discount:add - Start add flow
      */
-    static async createCode(data: {
-        code: string;
-        type: 'PERCENTAGE' | 'FIXED';
-        amount: number;
-        maxUses: number;
-        expiryDate?: Date;
-    }): Promise<boolean> {
-        try {
-            // This would insert into database
-            // await prisma.discountCode.create({
-            //     data: {
-            //         code: data.code.toUpperCase(),
-            //         type: data.type,
-            //         amount: data.amount,
-            //         maxUses: data.maxUses,
-            //         expiryDate: data.expiryDate,
-            //         active: true,
-            //     },
-            // });
+    static async handleAddDiscount(ctx: Context): Promise<void> {
+        const userId = ctx.from?.id;
+        if (!userId) return;
 
-            logger.info(`Discount code created: ${data.code}`);
-            return true;
-        } catch (error) {
-            logger.error('Error creating discount code:', error);
-            return false;
-        }
+        const { AdminConversationHandler, AdminState } = require('./AdminConversationHandler');
+        AdminConversationHandler.setState(userId, AdminState.WAITING_DISCOUNT_CODE);
+
+        await ctx.editMessageText(
+            '🎟 <b>افزودن کد تخفیف جدید</b>\n\n' +
+            'ابتدا، <b>عبارت کد تخفیف</b> را وارد کنید:\n' +
+            '(مثلاً: SUMMER2024)',
+            {
+                parse_mode: 'HTML',
+                reply_markup: {
+                    inline_keyboard: [[{ text: '🔙 انصراف', callback_data: 'admin:discounts' }]]
+                }
+            }
+        );
+        await ctx.answerCallbackQuery();
     }
 
     /**
-     * Deactivate discount code
+     * Handle deleting a discount code
      */
-    static async deactivateCode(codeId: number): Promise<boolean> {
+    static async handleDeleteDiscount(ctx: Context, codeId: number): Promise<void> {
         try {
-            // This would update database
-            // await prisma.discountCode.update({
-            //     where: { id: codeId },
-            //     data: { active: false },
-            // });
-
-            logger.info(`Discount code deactivated: ${codeId}`);
-            return true;
+            await prisma.discountCode.delete({ where: { id: codeId } });
+            await ctx.reply('✅ کد تخفیف با موفقیت حذف شد.');
         } catch (error) {
-            logger.error('Error deactivating discount code:', error);
-            return false;
+            logger.error('Error deleting discount code:', error);
+            await ctx.reply('❌ خطا در حذف کد تخفیف.');
         }
     }
 }

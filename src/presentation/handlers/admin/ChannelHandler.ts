@@ -1,19 +1,9 @@
 import { Context } from 'grammy';
-// import { prisma } from '../../../infrastructure/database/prisma';
+import { prisma } from '../../../infrastructure/database/prisma';
 import { logger } from '../../../shared/logger';
-
-// Temporary type definition - this would be in Prisma schema
-interface RequiredChannel {
-    id: number;
-    channelId: string;
-    channelName: string;
-    active: boolean;
-    createdAt: Date;
-}
 
 /**
  * ChannelHandler - Manage required channels for bot access
- * Note: Requires RequiredChannel model in database
  */
 export class ChannelHandler {
     /**
@@ -21,54 +11,33 @@ export class ChannelHandler {
      */
     static async handleChannelsMenu(ctx: Context): Promise<void> {
         try {
-            const message = `
-📺 <b>مدیریت کانال‌های اجباری</b>
+            const channels = await prisma.channel.findMany({
+                orderBy: { createdAt: 'desc' }
+            });
 
-⚙️ <b>وضعیت:</b>
-این ویژگی نیازمند جدول <code>required_channels</code> در پایگاه داده است.
+            let message = '📺 <b>مدیریت کانال‌های قفل</b>\n\n' +
+                'لیست کانال‌هایی که کاربر برای استفاده از ربات باید عضو آن‌ها باشد:\n\n';
 
-🎯 <b>کاربرد:</b>
-• الزام کاربران به عضویت در کانال‌های خاص
-• بررسی خودکار عضویت قبل از استفاده
-• مدیریت چندین کانال همزمان
+            if (channels.length === 0) {
+                message += '❌ هیچ کانالی ثبت نشده است.\n';
+            } else {
+                channels.forEach((channel, index) => {
+                    message += `${index + 1}. <b>${channel.name}</b>\n` +
+                        `   ID: <code>${channel.chatId}</code>\n` +
+                        `   Link: ${channel.link}\n` +
+                        `   /delchannel_${channel.id}\n\n`;
+                });
+            }
 
-📋 <b>امکانات:</b>
-• افزودن کانال جدید
-• حذف کانال
-• فعال/غیرفعال کردن بررسی
-• تست دسترسی ربات به کانال
-
-💡 <b>نحوه استفاده:</b>
-1. ربات را به عنوان ادمین به کانال اضافه کنید
-2. شناسه کانال را وارد کنید (@channelname یا -100...)
-3. بررسی عضویت فعال می‌شود
-
-🔮 <b>پیاده‌سازی:</b>
-برای فعال‌سازی این ویژگی:
-
-1. جدول را به schema.prisma اضافه کنید:
-<code>
-model RequiredChannel {
-  id          Int      @id @default(autoincrement())
-  channelId   String   @db.VarChar(100)
-  channelName String   @db.VarChar(255)
-  active      Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  
-  @@map("required_channels")
-}
-</code>
-
-2. Middleware عضویت کانال را فعال کنید
-3. از این handler برای مدیریت استفاده کنید
-            `.trim();
+            message += '\nبرای افزودن کانال جدید، از دکمه زیر استفاده کنید.';
 
             await ctx.editMessageText(message, {
                 parse_mode: 'HTML',
                 reply_markup: {
-                    inline_keyboard: [[
-                        { text: '🔙 بازگشت', callback_data: 'admin:menu' },
-                    ]],
+                    inline_keyboard: [
+                        [{ text: '➕ افزودن کانال جدید', callback_data: 'admin:channel:add' }],
+                        [{ text: '🔙 بازگشت', callback_data: 'admin:menu' }],
+                    ],
                 },
             });
 
@@ -81,101 +50,94 @@ model RequiredChannel {
 
     /**
      * Check if user is member of required channels
-     * This would be used in middleware
      */
-    static async checkUserMembership(_ctx: Context, _userId: number): Promise<boolean> {
+    static async checkUserMembership(ctx: Context, userId: number): Promise<boolean> {
         try {
-            // This would query the database for required channels
-            // For now, return true (no channels required)
+            const channels = await prisma.channel.findMany();
+            if (channels.length === 0) return true;
 
-            // Example implementation:
-            // const channels = await prisma.requiredChannel.findMany({ where: { active: true } });
-            // 
-            // for (const channel of channels) {
-            //     const member = await ctx.api.getChatMember(channel.channelId, userId);
-            //     if (!['member', 'administrator', 'creator'].includes(member.status)) {
-            //         return false;
-            //     }
-            // }
+            for (const channel of channels) {
+                try {
+                    const member = await ctx.api.getChatMember(channel.chatId, userId);
+                    if (!['creator', 'administrator', 'member'].includes(member.status)) {
+                        return false;
+                    }
+                } catch (err) {
+                    logger.warn(`Failed to check membership for channel ${channel.chatId}:`, err);
+                    // Generate link for user to join
+                    // Return false to block user
+                    return false;
+                }
+            }
 
             return true;
         } catch (error) {
             logger.error('Error checking user membership:', error);
-            return true; // Don't block on error
+            return true; // Don't block on system error, or false for strict security?
+            // Safer to allow access if DB fails, to avoid total lockout
         }
     }
 
     /**
-     * Get required channels list
+     * Get missing channels for a user
      */
-    static async getRequiredChannels(): Promise<RequiredChannel[]> {
+    static async getMissingChannels(ctx: Context, userId: number): Promise<any[]> {
+        const missing = [];
         try {
-            // This would query the database
-            // const channels = await prisma.requiredChannel.findMany({
-            //     where: { active: true },
-            //     orderBy: { createdAt: 'desc' },
-            // });
-            // return channels;
-
-            return [];
+            const channels = await prisma.channel.findMany();
+            for (const channel of channels) {
+                try {
+                    const member = await ctx.api.getChatMember(channel.chatId, userId);
+                    if (!['creator', 'administrator', 'member'].includes(member.status)) {
+                        missing.push(channel);
+                    }
+                } catch (err) {
+                    logger.warn(`Failed to check membership for channel ${channel.chatId}:`, err);
+                    missing.push(channel); // Assume missing if check fails
+                }
+            }
         } catch (error) {
-            logger.error('Error getting required channels:', error);
-            return [];
+            logger.error('Error getting missing channels:', error);
         }
+        return missing;
     }
 
     /**
-     * Add required channel
+     * Handle admin:channel:add - Start add flow
      */
-    static async addChannel(channelId: string, _channelName: string): Promise<boolean> {
-        try {
-            // This would insert into database
-            // await prisma.requiredChannel.create({
-            //     data: {
-            //         channelId,
-            //         channelName,
-            //         active: true,
-            //     },
-            // });
+    static async handleAddChannel(ctx: Context): Promise<void> {
+        const userId = ctx.from?.id;
+        if (!userId) return;
 
-            logger.info(`Required channel added: ${channelId}`);
-            return true;
-        } catch (error) {
-            logger.error('Error adding channel:', error);
-            return false;
-        }
+        const { AdminConversationHandler, AdminState } = require('./AdminConversationHandler');
+        AdminConversationHandler.setState(userId, AdminState.WAITING_CHANNEL_ADD_NAME);
+
+        await ctx.editMessageText(
+            '📺 <b>افزودن کانال جدید</b>\n\n' +
+            'ابتدا، لطفاً <b>نام نمایشی کانال</b> را ارسال کنید:\n' +
+            '(مثلاً: کانال اطلاع‌رسانی)',
+            {
+                parse_mode: 'HTML',
+                reply_markup: {
+                    inline_keyboard: [[{ text: '🔙 انصراف', callback_data: 'admin:channels' }]]
+                }
+            }
+        );
+        await ctx.answerCallbackQuery();
     }
 
     /**
-     * Remove required channel
+     * Handle deleting a channel
      */
-    static async removeChannel(channelId: number): Promise<boolean> {
+    static async handleDeleteChannel(ctx: Context, channelId: number): Promise<void> {
         try {
-            // This would delete from database
-            // await prisma.requiredChannel.delete({
-            //     where: { id: channelId },
-            // });
-
-            logger.info(`Required channel removed: ${channelId}`);
-            return true;
+            await prisma.channel.delete({ where: { id: channelId } });
+            await ctx.reply('✅ کانال با موفقیت حذف شد.');
+            // Refresh menu logic or notify user to go back
+            // Since this might be triggered via command /delchannel_xxx, we can show menu again handled by next message or just reply
         } catch (error) {
-            logger.error('Error removing channel:', error);
-            return false;
-        }
-    }
-
-    /**
-     * Test bot access to channel
-     */
-    static async testChannelAccess(ctx: Context, channelId: string): Promise<boolean> {
-        try {
-            await ctx.api.getChat(channelId);
-            const botMember = await ctx.api.getChatMember(channelId, ctx.me.id);
-
-            return ['administrator', 'creator'].includes(botMember.status);
-        } catch (error) {
-            logger.error('Error testing channel access:', error);
-            return false;
+            logger.error('Error deleting channel:', error);
+            await ctx.reply('❌ خطا در حذف کانال.');
         }
     }
 }

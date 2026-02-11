@@ -37,9 +37,7 @@ export class BroadcastHandler {
     static async handleBroadcastAll(ctx: Context): Promise<void> {
         try {
             const users = await prisma.user.findMany({
-                where: {
-                    userStatus: 'ACTIVE',
-                },
+                where: { userStatus: 'ACTIVE' },
                 select: { chatId: true },
             });
 
@@ -48,7 +46,7 @@ export class BroadcastHandler {
                 return;
             }
 
-            await this.promptForMessage(ctx, users.map(u => Number(u.chatId)), 'همه کاربران');
+            await this.initiateBroadcast(ctx, users.map(u => Number(u.chatId)), 'همه کاربران');
         } catch (error) {
             logger.error('Error in broadcast all:', error);
             await ctx.answerCallbackQuery({ text: '❌ خطا رخ داد' });
@@ -61,12 +59,8 @@ export class BroadcastHandler {
     static async handleBroadcastActive(ctx: Context): Promise<void> {
         try {
             const activeInvoices = await prisma.invoice.findMany({
-                where: {
-                    status: 'ACTIVE',
-                },
-                include: {
-                    user: true,
-                },
+                where: { status: 'ACTIVE' },
+                include: { user: true },
                 distinct: ['userId'],
             });
 
@@ -79,7 +73,7 @@ export class BroadcastHandler {
                 return;
             }
 
-            await this.promptForMessage(ctx, userIds, 'دارندگان سرویس فعال');
+            await this.initiateBroadcast(ctx, userIds, 'دارندگان سرویس فعال');
         } catch (error) {
             logger.error('Error in broadcast active:', error);
             await ctx.answerCallbackQuery({ text: '❌ خطا رخ داد' });
@@ -91,11 +85,8 @@ export class BroadcastHandler {
      */
     static async handleBroadcastInactive(ctx: Context): Promise<void> {
         try {
-            // Get users without active services
             const usersWithActiveServices = await prisma.invoice.findMany({
-                where: {
-                    status: 'ACTIVE',
-                },
+                where: { status: 'ACTIVE' },
                 select: { userId: true },
                 distinct: ['userId'],
             });
@@ -105,9 +96,7 @@ export class BroadcastHandler {
             const inactiveUsers = await prisma.user.findMany({
                 where: {
                     userStatus: 'ACTIVE',
-                    id: {
-                        notIn: activeUserIds,
-                    },
+                    id: { notIn: activeUserIds },
                 },
                 select: { chatId: true },
             });
@@ -117,7 +106,7 @@ export class BroadcastHandler {
                 return;
             }
 
-            await this.promptForMessage(
+            await this.initiateBroadcast(
                 ctx,
                 inactiveUsers.map(u => Number(u.chatId)),
                 'کاربران بدون سرویس فعال'
@@ -129,10 +118,21 @@ export class BroadcastHandler {
     }
 
     /**
-     * Prompt admin to send message for broadcast
+     * Initiate broadcast flow (set state)
      */
-    private static async promptForMessage(ctx: Context, userIds: number[], targetLabel: string): Promise<void> {
+    private static async initiateBroadcast(ctx: Context, userIds: number[], targetLabel: string): Promise<void> {
         try {
+            const userId = ctx.from?.id;
+            if (!userId) return;
+
+            const { AdminConversationHandler, AdminState } = require('./AdminConversationHandler');
+
+            // Set state and store target user IDs in session
+            AdminConversationHandler.setState(userId, AdminState.WAITING_BROADCAST_MESSAGE, {
+                broadcastTargetIds: userIds,
+                broadcastTargetLabel: targetLabel
+            });
+
             const message = `
 📢 <b>ارسال پیام انبوه</b>
 
@@ -140,9 +140,7 @@ export class BroadcastHandler {
 📊 <b>تعداد:</b> ${userIds.length} نفر
 
 📝 لطفاً پیام خود را ارسال کنید.
-
 <i>پیام شما به ${userIds.length} نفر ارسال خواهد شد.</i>
-
 ⚠️ <b>نکته:</b> از HTML برای قالب‌بندی استفاده کنید.
 
 برای لغو، روی دکمه زیر کلیک کنید:
@@ -158,20 +156,14 @@ export class BroadcastHandler {
             });
 
             await ctx.answerCallbackQuery();
-
-            // Store broadcast context for next message
-            // Note: In a production app, this would use a state management system
-            // For now, this is a placeholder
-            logger.info(`Broadcast prepared for ${userIds.length} users`);
         } catch (error) {
-            logger.error('Error prompting for message:', error);
+            logger.error('Error initiating broadcast:', error);
             await ctx.answerCallbackQuery({ text: '❌ خطا رخ داد' });
         }
     }
 
     /**
-     * Execute broadcast (called after admin sends message)
-     * Note: This would typically be triggered by a conversation or state handler
+     * Execute broadcast (called from ConversationHandler)
      */
     static async executeBroadcast(
         ctx: Context,
@@ -180,11 +172,7 @@ export class BroadcastHandler {
     ): Promise<void> {
         try {
             const adminId = ctx.from?.id;
-
-            if (!adminId) {
-                await ctx.reply('❌ خطا: شناسایی ادمین ناموفق بود.');
-                return;
-            }
+            if (!adminId) return;
 
             // Trigger broadcast job
             await triggerBroadcast(userIds, message, adminId, 'HTML');
@@ -199,7 +187,6 @@ export class BroadcastHandler {
             `.trim();
 
             await ctx.reply(confirmMessage, { parse_mode: 'HTML' });
-
             logger.info(`Broadcast queued by admin ${adminId} for ${userIds.length} users`);
         } catch (error) {
             logger.error('Error executing broadcast:', error);
