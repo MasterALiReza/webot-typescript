@@ -5,6 +5,7 @@ import { rateLimiterMiddleware } from './presentation/middlewares/rateLimiter';
 import { userRegistrationMiddleware } from './presentation/middlewares/userRegistration';
 import { userBlockCheckMiddleware } from './presentation/middlewares/userBlockCheck';
 import { adminAuthMiddleware } from './presentation/middlewares/adminAuthMiddleware';
+import { channelLockMiddleware } from './presentation/middlewares/channelLockMiddleware';
 
 // User Handlers
 import { StartHandler } from './presentation/handlers/user/StartHandler';
@@ -26,6 +27,10 @@ import { PaymentSettingsHandler } from './presentation/handlers/admin/PaymentSet
 import { TextCustomizationHandler } from './presentation/handlers/admin/TextCustomizationHandler';
 import { ChannelHandler } from './presentation/handlers/admin/ChannelHandler';
 import { DiscountHandler } from './presentation/handlers/admin/DiscountHandler';
+import { SupportTicketHandler } from './presentation/handlers/admin/SupportTicketHandler'; // NEW
+import { AdminConversationHandler } from './presentation/handlers/admin/AdminConversationHandler';
+import { UserConversationHandler } from './presentation/handlers/user/UserConversationHandler';
+import { HttpServer, PaymentController } from './infrastructure/http';
 
 // BullMQ Job System
 import { initializeJobs, shutdownJobs } from './infrastructure/queue/JobScheduler';
@@ -42,6 +47,12 @@ const bot = new Bot(config.BOT_TOKEN);
 bot.use(userRegistrationMiddleware);  // Auto-register new users
 bot.use(rateLimiterMiddleware);       // Anti-spam
 bot.use(userBlockCheckMiddleware);    // Block check
+bot.use(channelLockMiddleware);       // Channel lock check
+bot.on('message:text', async (ctx, next) => {
+    await AdminConversationHandler.handleMessage(ctx, async () => {
+        await UserConversationHandler.handleMessage(ctx, next);
+    });
+});
 
 // Handlers
 const startHandler = new StartHandler();
@@ -85,11 +96,23 @@ bot.callbackQuery('cancel', async (ctx) => {
     await ctx.answerCallbackQuery();
 });
 
+bot.callbackQuery(/^add_discount:(\d+)$/, async (ctx) => {
+    const productId = parseInt(ctx.match[1]);
+    await purchaseHandler.handleAddDiscount(ctx, productId);
+});
+
+bot.callbackQuery(/^remove_discount:(\d+)$/, async (ctx) => {
+    const productId = parseInt(ctx.match[1]);
+    await purchaseHandler.handleRemoveDiscount(ctx, productId);
+});
+
 // ========================
 // USER CALLBACK HANDLERS - Wallet
 // ========================
 bot.callbackQuery('wallet', (ctx) => walletHandler.showWallet(ctx));
 bot.callbackQuery('charge:card', (ctx) => walletHandler.showCardToCard(ctx));
+bot.callbackQuery('charge:online', (ctx) => walletHandler.handleOnlinePayment(ctx));
+bot.callbackQuery('send_receipt', (ctx) => walletHandler.handleSendReceipt(ctx));
 
 // ========================
 // ADMIN CALLBACK HANDLERS - Main Menu
@@ -109,8 +132,6 @@ bot.callbackQuery('admin:stats:panels', adminAuthMiddleware(), StatisticsHandler
 // ADMIN CALLBACK HANDLERS - User Management
 // ========================
 bot.callbackQuery('admin:users', adminAuthMiddleware(), UserManagementHandler.handleUsersMenu);
-// Search user - placeholder (requires conversation or text input)
-// bot.callbackQuery('admin:users:search', adminAuthMiddleware(), UserManagementHandler.handleSearchUser);
 bot.callbackQuery('admin:users:recent', adminAuthMiddleware(), UserManagementHandler.handleRecentUsers);
 bot.callbackQuery('admin:users:blocked', adminAuthMiddleware(), UserManagementHandler.handleBlockedUsers);
 
@@ -138,8 +159,19 @@ bot.callbackQuery(/^admin:user:services:(\d+)$/, adminAuthMiddleware(), async (c
 // ADMIN CALLBACK HANDLERS - Panel Management
 // ========================
 bot.callbackQuery('admin:panels', adminAuthMiddleware(), PanelManagementHandler.handlePanelsMenu);
-// List panels - use main panels menu instead
-// bot.callbackQuery('admin:panels:list', adminAuthMiddleware(), PanelManagementHandler.handleListPanels);
+bot.callbackQuery('admin:panels:list', adminAuthMiddleware(), PanelManagementHandler.handlePanelList);
+bot.callbackQuery('admin:panel:add', adminAuthMiddleware(), PanelManagementHandler.handleAddPanel);
+
+bot.callbackQuery(/^admin:panel:edit:(\d+)$/, adminAuthMiddleware(), async (ctx) => {
+    const panelId = parseInt(ctx.match[1]);
+    await PanelManagementHandler.handleEditPanel(ctx, panelId);
+});
+
+bot.callbackQuery(/^admin:panel:edit:(name|url|username|password):(\d+)$/, adminAuthMiddleware(), async (ctx) => {
+    const field = ctx.match[1];
+    const panelId = parseInt(ctx.match[2]);
+    await PanelManagementHandler.handleEditPanelField(ctx, panelId, field);
+});
 
 bot.callbackQuery(/^admin:panel:view:(\d+)$/, adminAuthMiddleware(), async (ctx) => {
     const panelId = parseInt(ctx.match[1]);
@@ -161,18 +193,22 @@ bot.callbackQuery(/^admin:panel:delete:(\d+)$/, adminAuthMiddleware(), async (ct
     await PanelManagementHandler.handleDeletePanel(ctx, panelId);
 });
 
-// Confirm delete is handled within handleDeletePanel itself
-// bot.callbackQuery(/^admin:panel:delete:confirm:(\d+)$/, adminAuthMiddleware(), async (ctx) => {
-//     const panelId = parseInt(ctx.match[1]);
-//     await PanelManagementHandler.handleConfirmDelete(ctx, panelId);
-// });
-
 // ========================
 // ADMIN CALLBACK HANDLERS - Product Management
 // ========================
 bot.callbackQuery('admin:products', adminAuthMiddleware(), ProductManagementHandler.handleProductsMenu);
-// List products - use main products menu instead
-// bot.callbackQuery('admin:products:list', adminAuthMiddleware(), ProductManagementHandler.handleListProducts);
+bot.callbackQuery('admin:products:list', adminAuthMiddleware(), ProductManagementHandler.handleProductList);
+
+bot.callbackQuery(/^admin:product:edit:(\d+)$/, adminAuthMiddleware(), async (ctx) => {
+    const productId = parseInt(ctx.match[1]);
+    await ProductManagementHandler.handleEditProduct(ctx, productId);
+});
+
+bot.callbackQuery(/^admin:product:edit:(name|price|volume|duration):(\d+)$/, adminAuthMiddleware(), async (ctx) => {
+    const field = ctx.match[1];
+    const productId = parseInt(ctx.match[2]);
+    await ProductManagementHandler.handleEditProductField(ctx, productId, field);
+});
 
 bot.callbackQuery(/^admin:product:view:(\d+)$/, adminAuthMiddleware(), async (ctx) => {
     const productId = parseInt(ctx.match[1]);
@@ -188,12 +224,6 @@ bot.callbackQuery(/^admin:product:delete:(\d+)$/, adminAuthMiddleware(), async (
     const productId = parseInt(ctx.match[1]);
     await ProductManagementHandler.handleDeleteProduct(ctx, productId);
 });
-
-// Confirm delete is handled within handleDeleteProduct itself
-// bot.callbackQuery(/^admin:product:delete:confirm:(\d+)$/, adminAuthMiddleware(), async (ctx) => {
-//     const productId = parseInt(ctx.match[1]);
-//     await ProductManagementHandler.handleConfirmDelete(ctx, productId);
-// });
 
 // ========================
 // ADMIN CALLBACK HANDLERS - Broadcast
@@ -213,7 +243,43 @@ bot.callbackQuery('admin:payment:zarinpal', adminAuthMiddleware(), PaymentSettin
 bot.callbackQuery('admin:payment:crypto', adminAuthMiddleware(), PaymentSettingsHandler.handleCryptoSettings);
 bot.callbackQuery('admin:texts', adminAuthMiddleware(), TextCustomizationHandler.handleTextsMenu);
 bot.callbackQuery('admin:channels', adminAuthMiddleware(), ChannelHandler.handleChannelsMenu);
+bot.callbackQuery('admin:channels', adminAuthMiddleware(), ChannelHandler.handleChannelsMenu);
+bot.callbackQuery('admin:channel:add', adminAuthMiddleware(), ChannelHandler.handleAddChannel);
+
 bot.callbackQuery('admin:discounts', adminAuthMiddleware(), DiscountHandler.handleDiscountsMenu);
+bot.callbackQuery('admin:discount:add', adminAuthMiddleware(), DiscountHandler.handleAddDiscount);
+
+// Delete Commands
+bot.hears(/\/delchannel_(\d+)/, adminAuthMiddleware(), async (ctx) => {
+    const channelId = parseInt(ctx.match[1]);
+    await ChannelHandler.handleDeleteChannel(ctx, channelId);
+});
+
+bot.hears(/\/delcode_(\d+)/, adminAuthMiddleware(), async (ctx) => {
+    const codeId = parseInt(ctx.match[1]);
+    await DiscountHandler.handleDeleteDiscount(ctx, codeId);
+});
+
+// ========================
+// ADMIN CALLBACK HANDLERS - Support Tickets (NEW)
+// ========================
+bot.callbackQuery('admin:tickets', adminAuthMiddleware(), SupportTicketHandler.handleTicketsMenu);
+bot.callbackQuery('admin:tickets:open', adminAuthMiddleware(), SupportTicketHandler.handleListOpen);
+
+bot.callbackQuery(/^admin:ticket:view:(\d+)$/, adminAuthMiddleware(), async (ctx) => {
+    const ticketId = parseInt(ctx.match[1]);
+    await SupportTicketHandler.handleViewTicket(ctx, ticketId);
+});
+
+bot.callbackQuery(/^admin:ticket:reply:(\d+)$/, adminAuthMiddleware(), async (ctx) => {
+    const ticketId = parseInt(ctx.match[1]);
+    await SupportTicketHandler.handleReplyTicket(ctx, ticketId);
+});
+
+bot.callbackQuery(/^admin:ticket:close:(\d+)$/, adminAuthMiddleware(), async (ctx) => {
+    const ticketId = parseInt(ctx.match[1]);
+    await SupportTicketHandler.handleCloseTicket(ctx, ticketId);
+});
 
 // ========================
 // TEXT HANDLERS (Keyboard Buttons)
@@ -268,9 +334,12 @@ bot.callbackQuery('profile', (ctx) => profileHandler.showProfile(ctx));
 bot.callbackQuery('profile:referral_code', (ctx) => profileHandler.showReferralCode(ctx));
 
 bot.callbackQuery('support', (ctx) => supportHandler.showSupport(ctx));
+bot.callbackQuery('support:new', (ctx) => supportHandler.handleNewTicket(ctx));       // NEW
+bot.callbackQuery('support:my_tickets', (ctx) => supportHandler.handleMyTickets(ctx)); // NEW
 bot.callbackQuery('support:contact', (ctx) => supportHandler.showContactInfo(ctx));
 bot.callbackQuery('support:faq', (ctx) => supportHandler.showFAQ(ctx));
 bot.callbackQuery('help', (ctx) => helpHandler.showHelp(ctx));
+
 
 // ========================
 // MAIN FUNCTION
@@ -297,6 +366,14 @@ async function main() {
         await initializeJobs(bot);
         logger.info('✅ Background jobs initialized');
 
+        // Start HTTP Server for Payments
+        const httpServer = new HttpServer();
+        const paymentController = new PaymentController(bot);
+        // We need to access the app to register routes, OR use registerRoute method
+        httpServer.registerRoute('/payment', paymentController.router);
+        httpServer.start();
+        logger.info('✅ Payment Server initialized');
+
         // Start bot
         await bot.start({
             onStart: () => {
@@ -311,4 +388,3 @@ async function main() {
 }
 
 main();
-

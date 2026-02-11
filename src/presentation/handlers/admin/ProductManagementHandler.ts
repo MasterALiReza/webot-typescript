@@ -297,6 +297,9 @@ ${statusEmoji} <b>وضعیت:</b> ${statusText}
     /**
      * Handle admin:product:edit:{id} - Show edit menu
      */
+    /**
+     * Handle admin:product:edit:{id} - Show edit menu
+     */
     static async handleEditProduct(ctx: Context, productId: number): Promise<void> {
         try {
             const product = await prisma.product.findUnique({ where: { id: productId } });

@@ -235,8 +235,11 @@ model HelpItem {
 
 // ─── Channel (عضویت اجباری) ──────────────────────────
 model Channel {
-  id   Int    @id @default(autoincrement())
-  link String @db.VarChar(200)
+  id        Int      @id @default(autoincrement())
+  name      String   @db.VarChar(255)
+  chatId    String   @map("chat_id") @db.VarChar(100)
+  link      String   @db.VarChar(200)
+  createdAt DateTime @default(now()) @map("created_at")
 
   @@map("channels")
 }

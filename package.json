@@ -25,10 +25,12 @@
   "license": "MIT",
   "dependencies": {
     "@prisma/client": "^5.22.0",
+    "@types/express": "^5.0.6",
     "axios": "^1.7.9",
     "axios-cookiejar-support": "^5.0.3",
     "bullmq": "^5.67.3",
     "dotenv": "^16.4.7",
+    "express": "^5.2.1",
     "grammy": "^1.33.0",
     "ioredis": "^5.9.2",
     "tough-cookie": "^5.0.0",

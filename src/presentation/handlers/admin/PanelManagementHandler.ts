@@ -318,6 +318,9 @@ ${statusEmoji} <b>وضعیت:</b> ${statusText}
     /**
      * Handle admin:panel:add - Add new panel
      */
+    /**
+     * Handle admin:panel:add - Add new panel
+     */
     static async handleAddPanel(ctx: Context): Promise<void> {
         try {
             const userId = ctx.from?.id;
