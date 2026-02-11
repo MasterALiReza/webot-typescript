@@ -10,6 +10,9 @@ import { adminAuthMiddleware } from './presentation/middlewares/adminAuthMiddlew
 import { StartHandler } from './presentation/handlers/user/StartHandler';
 import { PurchaseHandler } from './presentation/handlers/user/PurchaseHandler';
 import { WalletHandler } from './presentation/handlers/user/WalletHandler';
+import { ProfileHandler } from './presentation/handlers/user/ProfileHandler';
+import { SupportHandler } from './presentation/handlers/user/SupportHandler';
+import { HelpHandler } from './presentation/handlers/user/HelpHandler';
 
 // Admin Handlers
 import { AdminMenuHandler } from './presentation/handlers/admin/AdminMenuHandler';
@@ -44,6 +47,9 @@ bot.use(userBlockCheckMiddleware);    // Block check
 const startHandler = new StartHandler();
 const purchaseHandler = new PurchaseHandler();
 const walletHandler = new WalletHandler();
+const profileHandler = new ProfileHandler();
+const supportHandler = new SupportHandler();
+const helpHandler = new HelpHandler();
 
 // ========================
 // USER COMMANDS
@@ -52,6 +58,9 @@ bot.command('start', (ctx) => startHandler.handle(ctx));
 bot.command('buy', (ctx) => purchaseHandler.showProducts(ctx));
 bot.command('services', (ctx) => purchaseHandler.showMyServices(ctx));
 bot.command('wallet', (ctx) => walletHandler.showWallet(ctx));
+bot.command('profile', (ctx) => profileHandler.showProfile(ctx));
+bot.command('support', (ctx) => supportHandler.showSupport(ctx));
+bot.command('help', (ctx) => helpHandler.showHelp(ctx));
 
 // ========================
 // ADMIN COMMANDS
@@ -212,6 +221,11 @@ bot.callbackQuery('admin:discounts', adminAuthMiddleware(), DiscountHandler.hand
 bot.hears('🛒 خرید سرویس', (ctx) => purchaseHandler.showProducts(ctx));
 bot.hears('📦 سرویس‌های من', (ctx) => purchaseHandler.showMyServices(ctx));
 bot.hears('💰 کیف پول', (ctx) => walletHandler.showWallet(ctx));
+bot.hears('👤 پروفایل', (ctx) => profileHandler.showProfile(ctx));
+bot.hears('💬 پشتیبانی', (ctx) => supportHandler.showSupport(ctx));
+bot.hears('❓ راهنما', (ctx) => helpHandler.showHelp(ctx));
+// Also handle emoji variations just in case
+bot.hears('🎫 پشتیبانی', (ctx) => supportHandler.showSupport(ctx));
 
 // ========================
 // ERROR HANDLING
@@ -246,6 +260,17 @@ async function gracefulShutdown(signal: string) {
         process.exit(1);
     }
 }
+
+// ========================
+// CALLBACK HANDLERS - Profile & Support
+// ========================
+bot.callbackQuery('profile', (ctx) => profileHandler.showProfile(ctx));
+bot.callbackQuery('profile:referral_code', (ctx) => profileHandler.showReferralCode(ctx));
+
+bot.callbackQuery('support', (ctx) => supportHandler.showSupport(ctx));
+bot.callbackQuery('support:contact', (ctx) => supportHandler.showContactInfo(ctx));
+bot.callbackQuery('support:faq', (ctx) => supportHandler.showFAQ(ctx));
+bot.callbackQuery('help', (ctx) => helpHandler.showHelp(ctx));
 
 // ========================
 // MAIN FUNCTION

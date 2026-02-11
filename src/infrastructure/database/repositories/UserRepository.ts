@@ -109,4 +109,10 @@ export class UserRepository {
             where: { userStatus: 'BLOCKED' },
         });
     }
+
+    async getReferralCount(userId: number): Promise<number> {
+        return prisma.user.count({
+            where: { referredBy: (await this.findById(userId))?.chatId },
+        });
+    }
 }

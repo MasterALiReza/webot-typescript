@@ -1,5 +1,6 @@
 import { Context } from 'grammy';
 import { UserRepository } from '../../../infrastructure/database/repositories/UserRepository';
+import { getMainMenuKeyboard } from '../../keyboards/userKeyboards';
 
 const userRepo = new UserRepository();
 
@@ -17,16 +18,16 @@ export class StartHandler {
             await this.processReferral(ctx, user.id, refCode);
         }
 
-        const keyboard = this.buildMainKeyboard();
+
 
         await ctx.reply(
             `👋 سلام ${user.firstName || 'کاربر'}!\n\n` +
             `به ربات فروش سرویس VPN خوش آمدید.\n\n` +
-            `💰 موجودی شما: ${user.balance} تومان\n` +
+            `💰 موجودی شما: ${user.balance.toLocaleString()} تومان\n` +
             `👤 شناسه کاربری: ${user.chatId}\n\n` +
             `از منوی زیر گزینه مورد نظر خود را انتخاب کنید:`,
             {
-                reply_markup: keyboard,
+                reply_markup: getMainMenuKeyboard(),
             }
         );
     }
@@ -57,15 +58,5 @@ export class StartHandler {
         );
     }
 
-    private buildMainKeyboard() {
-        return {
-            keyboard: [
-                [{ text: '🛒 خرید سرویس' }, { text: '📦 سرویس‌های من' }],
-                [{ text: '💰 کیف پول' }, { text: '👤 پروفایل' }],
-                [{ text: '🎫 پشتیبانی' }, { text: '❓ راهنما' }],
-            ],
-            resize_keyboard: true,
-            persistent: true,
-        };
-    }
+
 }
