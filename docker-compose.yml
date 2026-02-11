@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: webot
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      - mysql
+      - redis
+    networks:
+      - webot-network
+
+  mysql:
+    image: mysql:8.0
+    container_name: webot-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-webot}
+      MYSQL_USER: ${MYSQL_USER:-webot}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-password}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    networks:
+      - webot-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: webot-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - webot-network
+
+networks:
+  webot-network:
+    driver: bridge
+
+volumes:
+  mysql-data:

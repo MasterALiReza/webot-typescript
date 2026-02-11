@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment variables
+.env
+
+# Logs
+*.log
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Prisma
+prisma/migrations/
+
+# Test coverage
+coverage/
+
+# Misc
+*.tsbuildinfo
+
+# Exclude documentation folder (managed separately)
+docs/
+
+# Exclude old PHP version
+botmirzapanel-main/
