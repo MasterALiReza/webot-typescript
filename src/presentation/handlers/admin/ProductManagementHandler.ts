@@ -267,16 +267,26 @@ ${statusEmoji} <b>وضعیت:</b> ${statusText}
      */
     static async handleAddProduct(ctx: Context): Promise<void> {
         try {
+            const userId = ctx.from?.id;
+            if (!userId) return;
+
+            // Import dynamically to avoid circular dependency if needed, or ensuring import matches
+            const { AdminConversationHandler, AdminState } = require('./AdminConversationHandler');
+
+            AdminConversationHandler.setState(userId, AdminState.WAITING_PRODUCT_NAME);
+
             await ctx.editMessageText(
                 '➕ <b>افزودن محصول جدید</b>\n\n' +
-                'این ویژگی به زودی اضافه می‌شود.\n\n' +
-                'فعلاً می‌توانید از پایگاه داده مستقیماً محصول اضافه کنید.',
+                'لطفاً نام محصول را وارد کنید:',
                 {
                     parse_mode: 'HTML',
-                    reply_markup: getProductManagementKeyboard(),
+                    reply_markup: {
+                        inline_keyboard: [[
+                            { text: '❌ انصراف', callback_data: 'admin:products' },
+                        ]],
+                    },
                 }
             );
-
             await ctx.answerCallbackQuery();
         } catch (error) {
             logger.error('Error in add product handler:', error);
@@ -285,20 +295,35 @@ ${statusEmoji} <b>وضعیت:</b> ${statusText}
     }
 
     /**
-     * Handle admin:product:edit:{id} - Edit product (placeholder)
+     * Handle admin:product:edit:{id} - Show edit menu
      */
     static async handleEditProduct(ctx: Context, productId: number): Promise<void> {
         try {
+            const product = await prisma.product.findUnique({ where: { id: productId } });
+            if (!product) {
+                await ctx.answerCallbackQuery({ text: '❌ محصول یافت نشد' });
+                return;
+            }
+
             await ctx.editMessageText(
-                '✏️ <b>ویرایش محصول</b>\n\n' +
-                'این ویژگی به زودی اضافه می‌شود.\n\n' +
-                'فعلاً می‌توانید از پایگاه داده مستقیماً محصول را ویرایش کنید.',
+                `✏️ <b>ویرایش محصول: ${product.name}</b>\n\n` +
+                `لطفاً فیلدی که می‌خواهید ویرایش کنید را انتخاب نمایید:`,
                 {
                     parse_mode: 'HTML',
                     reply_markup: {
-                        inline_keyboard: [[
-                            { text: '🔙 بازگشت', callback_data: `admin:product:view:${productId}` },
-                        ]],
+                        inline_keyboard: [
+                            [
+                                { text: `✏️ نام (${product.name})`, callback_data: `admin:product:edit:name:${productId}` },
+                                { text: `💰 قیمت (${Number(product.price).toLocaleString('fa-IR')})`, callback_data: `admin:product:edit:price:${productId}` },
+                            ],
+                            [
+                                { text: `📊 حجم (${product.volume} GB)`, callback_data: `admin:product:edit:volume:${productId}` },
+                                { text: `⏱ مدت (${product.duration} روز)`, callback_data: `admin:product:edit:duration:${productId}` },
+                            ],
+                            [
+                                { text: '🔙 بازگشت', callback_data: `admin:product:view:${productId}` },
+                            ]
+                        ],
                     },
                 }
             );
@@ -306,6 +331,64 @@ ${statusEmoji} <b>وضعیت:</b> ${statusText}
             await ctx.answerCallbackQuery();
         } catch (error) {
             logger.error('Error in edit product handler:', error);
+            await ctx.answerCallbackQuery({ text: '❌ خطا رخ داد' });
+        }
+    }
+
+    /**
+     * Handle specific field edit selection
+     */
+    static async handleEditProductField(ctx: Context, productId: number, field: string): Promise<void> {
+        try {
+            const userId = ctx.from?.id;
+            if (!userId) return;
+
+            const product = await prisma.product.findUnique({ where: { id: productId } });
+            if (!product) {
+                await ctx.answerCallbackQuery({ text: '❌ محصول یافت نشد' });
+                return;
+            }
+
+            const { AdminConversationHandler, AdminState } = require('./AdminConversationHandler');
+
+            let prompt = '';
+            let state = '';
+
+            switch (field) {
+                case 'name':
+                    state = AdminState.WAITING_PRODUCT_EDIT_NAME;
+                    prompt = `✏️ <b>ویرایش نام محصول</b>\n\nنام فعلی: ${product.name}\n\nلطفاً <b>نام جدید</b> را وارد کنید:`;
+                    break;
+                case 'price':
+                    state = AdminState.WAITING_PRODUCT_EDIT_PRICE;
+                    prompt = `💰 <b>ویرایش قیمت محصول</b>\n\nقیمت فعلی: ${Number(product.price).toLocaleString('fa-IR')} تومان\n\nلطفاً <b>قیمت جدید</b> را به تومان وارد کنید:`;
+                    break;
+                case 'volume':
+                    state = AdminState.WAITING_PRODUCT_EDIT_VOLUME;
+                    prompt = `📊 <b>ویرایش حجم محصول</b>\n\nحجم فعلی: ${product.volume} GB\n\nلطفاً <b>حجم جدید</b> را وارد کنید (عدد):`;
+                    break;
+                case 'duration':
+                    state = AdminState.WAITING_PRODUCT_EDIT_DURATION;
+                    prompt = `⏱ <b>ویرایش مدت محصول</b>\n\nمدت فعلی: ${product.duration} روز\n\nلطفاً <b>مدت جدید</b> را وارد کنید (عدد):`;
+                    break;
+                default:
+                    return;
+            }
+
+            AdminConversationHandler.setState(userId, state, { productId });
+
+            await ctx.editMessageText(prompt, {
+                parse_mode: 'HTML',
+                reply_markup: {
+                    inline_keyboard: [[
+                        { text: '🔙 بازگشت', callback_data: `admin:product:edit:${productId}` },
+                    ]],
+                },
+            });
+
+            await ctx.answerCallbackQuery();
+        } catch (error) {
+            logger.error('Error in edit product field handler:', error);
             await ctx.answerCallbackQuery({ text: '❌ خطا رخ داد' });
         }
     }

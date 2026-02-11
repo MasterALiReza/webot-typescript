@@ -12,6 +12,12 @@ export class UserManagementHandler {
      */
     static async handleUsersMenu(ctx: Context): Promise<void> {
         try {
+            const userId = ctx.from?.id;
+            if (userId) {
+                const { AdminConversationHandler, AdminState } = require('./AdminConversationHandler');
+                AdminConversationHandler.setState(userId, AdminState.WAITING_USER_SEARCH);
+            }
+
             const message = `
 👥 <b>مدیریت کاربران</b>
 
@@ -93,6 +99,13 @@ export class UserManagementHandler {
                 return;
             }
 
+            // Clear any active conversation state when viewing a user
+            const adminId = ctx.from?.id;
+            if (adminId) {
+                const { AdminConversationHandler } = require('./AdminConversationHandler');
+                AdminConversationHandler.clearSession(adminId);
+            }
+
             await this.showUserProfile(user, ctx);
             await ctx.answerCallbackQuery();
         } catch (error) {
@@ -104,7 +117,7 @@ export class UserManagementHandler {
     /**
      * Show detailed user profile
      */
-    private static async showUserProfile(user: any, ctx: Context): Promise<void> {
+    public static async showUserProfile(user: any, ctx: Context): Promise<void> {
         const statusEmoji = user.userStatus === 'ACTIVE' ? '✅' : '🚫';
         const statusText = user.userStatus === 'ACTIVE' ? 'فعال' : 'مسدود';
 
@@ -327,14 +340,18 @@ ${statusEmoji} <b>وضعیت:</b> ${statusText}
 
     /**
      * Handle admin:user:add_balance:{id} - Prompt for amount
-     * Note: For now this is a placeholder. Full implementation will use conversation or inline input
      */
     static async handleAddBalance(ctx: Context, userId: number): Promise<void> {
         try {
+            const adminId = ctx.from?.id;
+            if (!adminId) return;
+
+            const { AdminConversationHandler, AdminState } = require('./AdminConversationHandler');
+            AdminConversationHandler.setState(adminId, AdminState.WAITING_USER_BALANCE_ADD, { targetUserId: userId });
+
             await ctx.editMessageText(
-                '💰 برای افزایش موجودی، لطفاً از طریق دستور زیر اقدام کنید:\n\n' +
-                '<code>/addbalance {userId} {amount}</code>\n\n' +
-                'این ویژگی به زودی با فرم تعاملی بهبود می‌یابد.',
+                '💰 <b>افزایش موجودی</b>\n\n' +
+                'لطفاً مبلغ مورد نظر را به تومان وارد کنید:',
                 {
                     parse_mode: 'HTML',
                     reply_markup: {
@@ -356,10 +373,15 @@ ${statusEmoji} <b>وضعیت:</b> ${statusText}
      */
     static async handleSubtractBalance(ctx: Context, userId: number): Promise<void> {
         try {
+            const adminId = ctx.from?.id;
+            if (!adminId) return;
+
+            const { AdminConversationHandler, AdminState } = require('./AdminConversationHandler');
+            AdminConversationHandler.setState(adminId, AdminState.WAITING_USER_BALANCE_SUB, { targetUserId: userId });
+
             await ctx.editMessageText(
-                '💰 برای کاهش موجودی، لطفاً از طریق دستور زیر اقدام کنید:\n\n' +
-                '<code>/subbalance {userId} {amount}</code>\n\n' +
-                'این ویژگی به زودی با فرم تعاملی بهبود می‌یابد.',
+                '💰 <b>کاهش موجودی</b>\n\n' +
+                'لطفاً مبلغ مورد نظر را به تومان وارد کنید:',
                 {
                     parse_mode: 'HTML',
                     reply_markup: {
@@ -381,10 +403,22 @@ ${statusEmoji} <b>وضعیت:</b> ${statusText}
      */
     static async handleSendMessage(ctx: Context, userId: number): Promise<void> {
         try {
+            const adminId = ctx.from?.id;
+            if (!adminId) return;
+
+            // Fetch user chat ID
+            const user = await prisma.user.findUnique({ where: { id: userId } });
+            if (!user) {
+                await ctx.answerCallbackQuery({ text: '❌ کاربر یافت نشد' });
+                return;
+            }
+
+            const { AdminConversationHandler, AdminState } = require('./AdminConversationHandler');
+            AdminConversationHandler.setState(adminId, AdminState.WAITING_USER_MESSAGE, { targetChatId: user.chatId });
+
             await ctx.editMessageText(
-                '💬 برای ارسال پیام، از دستور زیر استفاده کنید:\n\n' +
-                '<code>/sendmsg {userId} {message}</code>\n\n' +
-                'این ویژگی به زودی با فرم تعاملی بهبود می‌یابد.',
+                '💬 <b>ارسال پیام به کاربر</b>\n\n' +
+                'لطفاً متن پیام خود را وارد کنید:',
                 {
                     parse_mode: 'HTML',
                     reply_markup: {

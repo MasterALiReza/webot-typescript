@@ -316,17 +316,26 @@ ${statusEmoji} <b>وضعیت:</b> ${statusText}
     }
 
     /**
-     * Handle admin:panel:add - Add new panel (placeholder)
+     * Handle admin:panel:add - Add new panel
      */
     static async handleAddPanel(ctx: Context): Promise<void> {
         try {
+            const userId = ctx.from?.id;
+            if (userId) {
+                const { AdminConversationHandler, AdminState } = require('./AdminConversationHandler');
+                AdminConversationHandler.setState(userId, AdminState.WAITING_PANEL_NAME);
+            }
+
             await ctx.editMessageText(
                 '➕ <b>افزودن پنل جدید</b>\n\n' +
-                'این ویژگی به زودی اضافه می‌شود.\n\n' +
-                'فعلاً می‌توانید از پایگاه داده مستقیماً پنل اضافه کنید.',
+                'لطفاً <b>نام پنل</b> را وارد کنید:',
                 {
                     parse_mode: 'HTML',
-                    reply_markup: getPanelManagementKeyboard(),
+                    reply_markup: {
+                        inline_keyboard: [[
+                            { text: '🔙 بازگشت', callback_data: 'admin:panels' },
+                        ]],
+                    },
                 }
             );
 
@@ -338,20 +347,35 @@ ${statusEmoji} <b>وضعیت:</b> ${statusText}
     }
 
     /**
-     * Handle admin:panel:edit:{id} - Edit panel (placeholder)
+     * Handle admin:panel:edit:{id} - Show edit menu
      */
     static async handleEditPanel(ctx: Context, panelId: number): Promise<void> {
         try {
+            const panel = await prisma.panel.findUnique({ where: { id: panelId } });
+            if (!panel) {
+                await ctx.answerCallbackQuery({ text: '❌ پنل یافت نشد' });
+                return;
+            }
+
             await ctx.editMessageText(
-                '✏️ <b>ویرایش پنل</b>\n\n' +
-                'این ویژگی به زودی اضافه می‌شود.\n\n' +
-                'فعلاً می‌توانید از پایگاه داده مستقیماً پنل را ویرایش کنید.',
+                `✏️ <b>ویرایش پنل: ${panel.name}</b>\n\n` +
+                `لطفاً فیلدی که می‌خواهید ویرایش کنید را انتخاب نمایید:`,
                 {
                     parse_mode: 'HTML',
                     reply_markup: {
-                        inline_keyboard: [[
-                            { text: '🔙 بازگشت', callback_data: `admin:panel:view:${panelId}` },
-                        ]],
+                        inline_keyboard: [
+                            [
+                                { text: `✏️ نام`, callback_data: `admin:panel:edit:name:${panelId}` },
+                                { text: `🌐 URL`, callback_data: `admin:panel:edit:url:${panelId}` },
+                            ],
+                            [
+                                { text: `👤 نام کاربری`, callback_data: `admin:panel:edit:username:${panelId}` },
+                                { text: `🔑 رمز عبور`, callback_data: `admin:panel:edit:password:${panelId}` },
+                            ],
+                            [
+                                { text: '🔙 بازگشت', callback_data: `admin:panel:view:${panelId}` },
+                            ]
+                        ],
                     },
                 }
             );
@@ -359,6 +383,64 @@ ${statusEmoji} <b>وضعیت:</b> ${statusText}
             await ctx.answerCallbackQuery();
         } catch (error) {
             logger.error('Error in edit panel handler:', error);
+            await ctx.answerCallbackQuery({ text: '❌ خطا رخ داد' });
+        }
+    }
+
+    /**
+     * Handle specific field edit selection
+     */
+    static async handleEditPanelField(ctx: Context, panelId: number, field: string): Promise<void> {
+        try {
+            const userId = ctx.from?.id;
+            if (!userId) return;
+
+            const panel = await prisma.panel.findUnique({ where: { id: panelId } });
+            if (!panel) {
+                await ctx.answerCallbackQuery({ text: '❌ پنل یافت نشد' });
+                return;
+            }
+
+            const { AdminConversationHandler, AdminState } = require('./AdminConversationHandler');
+
+            let prompt = '';
+            let state = '';
+
+            switch (field) {
+                case 'name':
+                    state = AdminState.WAITING_PANEL_EDIT_NAME;
+                    prompt = `✏️ <b>ویرایش نام پنل</b>\n\nنام فعلی: ${panel.name}\n\nلطفاً <b>نام جدید</b> را وارد کنید:`;
+                    break;
+                case 'url':
+                    state = AdminState.WAITING_PANEL_EDIT_URL;
+                    prompt = `🌐 <b>ویرایش آدرس پنل</b>\n\nآدرس فعلی: <code>${panel.url}</code>\n\nلطفاً <b>آدرس جدید</b> را وارد کنید:`;
+                    break;
+                case 'username':
+                    state = AdminState.WAITING_PANEL_EDIT_USERNAME;
+                    prompt = `👤 <b>ویرایش نام کاربری پنل</b>\n\nنام کاربری فعلی: <code>${panel.username}</code>\n\nلطفاً <b>نام کاربری جدید</b> را وارد کنید:`;
+                    break;
+                case 'password':
+                    state = AdminState.WAITING_PANEL_EDIT_PASSWORD;
+                    prompt = `🔑 <b>ویرایش رمز عبور پنل</b>\n\nلطفاً <b>رمز عبور جدید</b> را وارد کنید:`;
+                    break;
+                default:
+                    return;
+            }
+
+            AdminConversationHandler.setState(userId, state, { panelId });
+
+            await ctx.editMessageText(prompt, {
+                parse_mode: 'HTML',
+                reply_markup: {
+                    inline_keyboard: [[
+                        { text: '🔙 بازگشت', callback_data: `admin:panel:edit:${panelId}` },
+                    ]],
+                },
+            });
+
+            await ctx.answerCallbackQuery();
+        } catch (error) {
+            logger.error('Error in edit panel field handler:', error);
             await ctx.answerCallbackQuery({ text: '❌ خطا رخ داد' });
         }
     }
