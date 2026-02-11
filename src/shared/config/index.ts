@@ -34,6 +34,7 @@ const ConfigSchema = z.object({
     AQAYE_PARDAKHT_API_KEY: z.string().optional(),
     DIGIPAY_API_KEY: z.string().optional(),
     CARD_NUMBER: z.string().optional(),
+    CARD_OWNER: z.string().optional(),
 
     // Optional Report Channel
     REPORT_CHANNEL_ID: z.string().optional(),

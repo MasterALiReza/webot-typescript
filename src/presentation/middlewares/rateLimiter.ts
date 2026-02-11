@@ -1,5 +1,6 @@
 import { Context, NextFunction } from 'grammy';
 import { UserRepository } from '../../infrastructure/database/repositories/UserRepository';
+import { config } from '../../shared/config';
 
 const userRepo = new UserRepository();
 
@@ -17,7 +18,7 @@ export async function rateLimiterMiddleware(ctx: Context, next: NextFunction) {
         await userRepo.resetMessageCount(user.id, now);
     } else {
         // Check if user exceeded limit
-        const limit = 10; // TODO: Get from bot settings
+        const limit = config.MESSAGE_LIMIT_PER_MIN;
         if (user.messageCount >= limit) {
             await ctx.reply('⚠️ تعداد پیام‌های شما بیش از حد مجاز است. لطفاً کمی صبر کنید.');
             return; // Don't call next()
