@@ -31,18 +31,17 @@ show_logo() {
     clear
     echo -e "${BLUE}"
     echo "================================================================================"
-    echo "  __  __ _____ _____   ______           ____   ____ _______   _______ _____ "
-    echo " |  \\/  |_   _|  __ \\ |___  /    /\\    |  _ \\ / __ \\__   __| |__   __/ ____|"
-    echo " | \\  / | | | | |__) |   / /    /  \\   | |_) | |  | | | |       | | | (___  "
-    echo " | |\\/| | | | |  _  /   / /    / /\\ \\  |  _ <| |  | | | |       | |  \\___ \\ "
-    echo " | |  | |_| |_| | \\ \\  / /__  / ____ \\ | |_) | |__| | | |       | |  ____) |"
-    echo " |_|  |_|_____|_|  \\_\\/_____/_/    \\_\\|____/ \\____/  |_|       |_| |_____/ "
+    echo " __        _______ ____   ___ _____   __     ______  _   _   ____   ___ _____ "
+    echo " \ \      / / ____| __ ) / _ \_   _|  \ \   / /  _ \| \ | | | __ ) / _ \_   _|"
+    echo "  \ \ /\ / /|  _| |  _ \| | | || |     \ \ / /| |_) |  \| | |  _ \| | | || |  "
+    echo "   \ V  V / | |___| |_) | |_| || |      \ V / |  __/| |\  | | |_) | |_| || |  "
+    echo "    \_/\_/  |_____|____/ \___/ |_|       \_/  |_|   |_| \_| |____/ \___/ |_|  "
     echo "================================================================================"
     echo -e "${NC}"
     echo ""
     echo -e "${CYAN}Version:${NC} ${YELLOW}1.0.0 (TypeScript)${NC}"
-    echo -e "${CYAN}Telegram Channel:${NC} ${BLUE}https://t.me/mirzapanel${NC}"
-    echo -e "${CYAN}GitHub:${NC} ${BLUE}https://github.com/yourusername/WeBot-typescript${NC}"
+    echo -e "${CYAN}Telegram Channel:${NC} ${BLUE}https://t.me/WexortYT${NC}"
+    echo -e "${CYAN}GitHub:${NC} ${BLUE}https://github.com/MasterALiReza/webot-typescript${NC}"
     echo ""
 }
 
@@ -183,7 +182,7 @@ install_bot() {
     echo -e "${YELLOW}Downloading WeBot...${NC}"
     
     # Option 1: From GitHub release
-    REPO="yourusername/WeBot-typescript"
+    REPO="MasterALiReza/webot-typescript"
     LATEST_RELEASE=$(curl -s "https://api.github.com/repos/$REPO/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
     
     if [ -z "$LATEST_RELEASE" ]; then
@@ -481,4 +480,5 @@ ln -sf "$0" /usr/local/bin/WeBot 2>/dev/null
 
 # Show menu
 show_menu
+
 
