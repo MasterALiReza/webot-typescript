@@ -55,7 +55,7 @@ export class ProfileHandler {
 
             // Use bot username from context if available, otherwise fallback
             const botUsername = ctx.me?.username || 'MirzaVPNBot';
-            const referralLink = `https://t.me/${botUsername}?start=ref_${user.referralCode}`;
+            const referralLink = `https://t.me/${botUsername}?start=ref_${user.refCode}`;
 
             await ctx.reply(
                 `👥 **لینک دعوت اختصاصی شما**\n\n` +

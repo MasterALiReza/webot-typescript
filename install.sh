@@ -260,7 +260,7 @@ EOF
     # Run Prisma migrations
     echo -e "${YELLOW}Setting up database schema...${NC}"
     npx prisma generate
-    npx prisma generate
+
     npm run db:deploy || {
         echo -e "${RED}[ERROR] Database migration failed!${NC}"
         echo -e "${YELLOW}Please check your database credentials and ensure the database is running.${NC}"
