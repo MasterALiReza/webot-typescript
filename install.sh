@@ -258,7 +258,13 @@ EOF
     # Run Prisma migrations
     echo -e "${YELLOW}Setting up database schema...${NC}"
     npx prisma generate
-    npx prisma migrate deploy
+    npx prisma generate
+    npm run db:deploy || {
+        echo -e "${RED}[ERROR] Database migration failed!${NC}"
+        echo -e "${YELLOW}Please check your database credentials and ensure the database is running.${NC}"
+        echo -e "${YELLOW}Check logs above for details.${NC}"
+        exit 1
+    }
     
     # Build TypeScript 
     echo -e "${YELLOW}Building application...${NC}"

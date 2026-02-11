@@ -258,6 +258,16 @@ async function main() {
         await prisma.$connect();
         logger.info('✅ Database connected');
 
+        // Check for essential tables to ensure migrations ran
+        try {
+            await prisma.user.count({ take: 1 });
+            logger.info('✅ Database schema verified');
+        } catch (error) {
+            logger.error('❌ Database schema verification failed. Did you run migrations?');
+            logger.error('Run "npm run db:deploy" to fix this.');
+            process.exit(1);
+        }
+
         // Initialize BullMQ jobs
         await initializeJobs(bot);
         logger.info('✅ Background jobs initialized');
