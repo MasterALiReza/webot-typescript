@@ -30,11 +30,17 @@ const ConfigSchema = z.object({
     BROADCAST_CHUNK_SIZE: z.string().transform(Number).default('30'),
 
     // Optional Payment Gateways
+    ZARINPAL_MERCHANT_ID: z.string().optional(),
+    ZARINPAL_CALLBACK_URL: z.string().optional(),
     NOWPAYMENTS_API_KEY: z.string().optional(),
     AQAYE_PARDAKHT_API_KEY: z.string().optional(),
     DIGIPAY_API_KEY: z.string().optional(),
     CARD_NUMBER: z.string().optional(),
     CARD_OWNER: z.string().optional(),
+
+    // Payment Server
+    PAYMENT_PORT: z.string().transform(Number).default('3000'),
+    PAYMENT_BASE_URL: z.string().optional(),
 
     // Optional Report Channel
     REPORT_CHANNEL_ID: z.string().optional(),
