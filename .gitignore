@@ -36,3 +36,6 @@ docs/
 
 # Exclude old PHP version
 botmirzapanel-main/
+
+# Exclude subscription version documentation (managed separately)
+Subscription Version/
