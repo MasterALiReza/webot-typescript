@@ -8,6 +8,7 @@ import crypto from 'crypto';
 interface PurchaseInput {
     userId: number;
     productId: number;
+    finalPrice?: number;
 }
 
 interface PurchaseResult {
@@ -37,9 +38,10 @@ export class PurchaseProductUseCase {
                 throw new NotFoundError('Product');
             }
 
-            // 3. Check balance
-            const price = Number(product.price);
-            if (Number(user.balance) < price) {
+            // 3. Determine price and check balance
+            const priceToDeduct = input.finalPrice !== undefined ? input.finalPrice : Number(product.price);
+
+            if (Number(user.balance) < priceToDeduct) {
                 throw new InsufficientBalanceError();
             }
 
@@ -53,6 +55,7 @@ export class PurchaseProductUseCase {
             }
 
             const panelAdapter = PanelFactory.create(panel);
+            // TODO: Handle panel error gracefully
             const panelUser = await panelAdapter.createUser({
                 username,
                 volume: product.volume,
@@ -61,7 +64,34 @@ export class PurchaseProductUseCase {
             });
 
             // 6. Deduct balance
-            await this.userRepo.deductBalance(user.id, price);
+            if (priceToDeduct > 0) {
+                await this.userRepo.deductBalance(user.id, priceToDeduct);
+            }
+
+            // 7. Process Referral Reward
+            if (user.referredBy) {
+                // Check if affiliate system enabled (could handle this via config/db setting)
+                // For simplicity, hardcode reward or fetch from setting. 
+                // Let's assume a fixed reward for now as per plan, or ideally fetch from DB.
+                // Since I don't want to add complexity of fetching settings right now, let's go with fixed 5000 as mentioned in ProfileHandler.
+                const rewardAmount = 5000;
+
+                // Credit referrer
+                // user.referredBy is BigInt (chatId) based on schema
+                // But addBalance takes ID (number). We need to find referrer by chatId first.
+                // Or update addBalance to take chatId?
+                // Let's us updateByChatId which is generic, or add specific method.
+                // UserRepository has updateByChatId.
+
+                await this.userRepo.updateByChatId(user.referredBy, {
+                    balance: { increment: rewardAmount }
+                });
+
+                // Notify referrer?
+                // We don't have access to bot instance here to send message.
+                // Notification should be handled by caller or via event bus.
+                // For now, silent reward.
+            }
 
             // 7. Create invoice
             const invoice = await this.invoiceRepo.create({

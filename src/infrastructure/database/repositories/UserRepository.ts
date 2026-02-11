@@ -23,12 +23,14 @@ export class UserRepository {
         chatId: bigint;
         username?: string;
         firstName?: string;
+        referredBy?: bigint;
     }): Promise<any> {
         return prisma.user.create({
             data: {
                 chatId: data.chatId,
                 username: data.username,
                 firstName: data.firstName,
+                referredBy: data.referredBy,
             },
         });
     }
@@ -47,9 +49,9 @@ export class UserRepository {
         });
     }
 
-    async incrementAffiliateCount(id: number): Promise<void> {
+    async incrementAffiliateCount(chatId: bigint): Promise<void> {
         await prisma.user.update({
-            where: { id },
+            where: { chatId },
             data: { affiliateCount: { increment: 1 } },
         });
     }
@@ -110,9 +112,9 @@ export class UserRepository {
         });
     }
 
-    async getReferralCount(userId: number): Promise<number> {
+    async getReferralCount(chatId: bigint): Promise<number> {
         return prisma.user.count({
-            where: { referredBy: (await this.findById(userId))?.chatId },
+            where: { referredBy: chatId },
         });
     }
 }

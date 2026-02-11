@@ -132,4 +132,13 @@ export class InvoiceRepository {
         });
         return Number(result._sum.productPrice || 0);
     }
+
+    async countActiveByUserId(userId: number): Promise<number> {
+        return prisma.invoice.count({
+            where: {
+                userId,
+                status: 'ACTIVE',
+            },
+        });
+    }
 }
