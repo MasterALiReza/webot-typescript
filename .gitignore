@@ -39,3 +39,6 @@ botmirzapanel-main/
 
 # Exclude subscription version documentation (managed separately)
 Subscription Version/
+
+# Exclude installation script
+install.sh

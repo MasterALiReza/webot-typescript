@@ -295,15 +295,6 @@ install_bot() {
         read -p "Enter Admin Chat ID: " ADMIN_CHAT_ID
     done
 
-    # Payment Configuration
-    echo -e "${YELLOW}\n=== Payment Configuration ===${NC}"
-    read -p "Enter Payment Server Port (default: 3000): " PAYMENT_PORT
-    PAYMENT_PORT=${PAYMENT_PORT:-3000}
-
-    read -p "Enter Card Number (optional): " CARD_NUMBER
-    read -p "Enter Card Owner Name (optional): " CARD_OWNER
-    read -p "Enter Zarinpal Merchant ID (optional): " ZARINPAL_MERCHANT_ID
-    read -p "Enter NowPayments API Key (optional): " NOWPAYMENTS_API_KEY
     read -p "Enter Report Channel ID (optional): " REPORT_CHANNEL_ID
     
     # Create .env file
@@ -323,12 +314,12 @@ REDIS_PORT=6379
 REDIS_PASSWORD=
 
 # Payment
-PAYMENT_PORT=$PAYMENT_PORT
+PAYMENT_PORT=3000
 PAYMENT_BASE_URL=
-ZARINPAL_MERCHANT_ID=$ZARINPAL_MERCHANT_ID
-NOWPAYMENTS_API_KEY=$NOWPAYMENTS_API_KEY
-CARD_NUMBER=$CARD_NUMBER
-CARD_OWNER=$CARD_OWNER
+ZARINPAL_MERCHANT_ID=
+NOWPAYMENTS_API_KEY=
+CARD_NUMBER=
+CARD_OWNER=
 
 # Reporting
 REPORT_CHANNEL_ID=$REPORT_CHANNEL_ID
