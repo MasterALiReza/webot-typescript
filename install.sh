@@ -236,6 +236,17 @@ install_bot() {
         echo -e "${RED}Invalid Chat ID${NC}"
         read -p "Enter Admin Chat ID: " ADMIN_CHAT_ID
     done
+
+    # Payment Configuration
+    echo -e "${YELLOW}\n=== Payment Configuration ===${NC}"
+    read -p "Enter Payment Server Port (default: 3000): " PAYMENT_PORT
+    PAYMENT_PORT=${PAYMENT_PORT:-3000}
+
+    read -p "Enter Card Number (optional): " CARD_NUMBER
+    read -p "Enter Card Owner Name (optional): " CARD_OWNER
+    read -p "Enter Zarinpal Merchant ID (optional): " ZARINPAL_MERCHANT_ID
+    read -p "Enter NowPayments API Key (optional): " NOWPAYMENTS_API_KEY
+    read -p "Enter Report Channel ID (optional): " REPORT_CHANNEL_ID
     
     # Create .env file
     echo -e "${YELLOW}Creating configuration file...${NC}"
@@ -253,6 +264,17 @@ REDIS_HOST=localhost
 REDIS_PORT=6379
 REDIS_PASSWORD=
 
+# Payment
+PAYMENT_PORT=$PAYMENT_PORT
+PAYMENT_BASE_URL=
+ZARINPAL_MERCHANT_ID=$ZARINPAL_MERCHANT_ID
+NOWPAYMENTS_API_KEY=$NOWPAYMENTS_API_KEY
+CARD_NUMBER=$CARD_NUMBER
+CARD_OWNER=$CARD_OWNER
+
+# Reporting
+REPORT_CHANNEL_ID=$REPORT_CHANNEL_ID
+
 # Logging
 LOG_LEVEL=info
 EOF
@@ -261,8 +283,9 @@ EOF
     echo -e "${YELLOW}Setting up database schema...${NC}"
     npx prisma generate
 
-    npm run db:deploy || {
-        echo -e "${RED}[ERROR] Database migration failed!${NC}"
+    # Use db push to ensure schema is synced even without migration files
+    npx prisma db push || {
+        echo -e "${RED}[ERROR] Database setup failed!${NC}"
         echo -e "${YELLOW}Please check your database credentials and ensure the database is running.${NC}"
         echo -e "${YELLOW}Check logs above for details.${NC}"
         exit 1
@@ -342,7 +365,8 @@ update_bot() {
     # Run migrations
     echo -e "${YELLOW}Migrating database...${NC}"
     npx prisma generate
-    npx prisma migrate deploy
+    npx prisma generate
+    npx prisma db push
     
     # Build
     echo -e "${YELLOW}Building...${NC}"
