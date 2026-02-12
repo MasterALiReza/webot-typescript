@@ -102,17 +102,26 @@ export class WalletHandler {
         }
     }
 
+    async processPaymentAmount(ctx: Context, amount: number) {
+        if (amount < 1000) {
+            await ctx.reply('❌ حداقل مبلغ قابل پرداخت ۱,۰۰۰ تومان است.');
+            return;
+        }
+        await this.confirmDepositAmount(ctx, amount);
+    }
+
     async confirmDepositAmount(ctx: Context, amount: number) {
         try {
             const gateways = [];
+            const settings = await prisma.botSetting.findFirst();
 
-            if (config.botSettings.nowPaymentsEnabled) {
+            if (settings?.nowPaymentsEnabled) {
                 gateways.push({ text: '💎 NowPayments (Crypto)', callback_data: `deposit_gateway_nowpayments_${amount}` });
             }
-            if (config.botSettings.zarinPalEnabled) { // Assuming this setting exists or similar
+            if (config.ZARINPAL_MERCHANT_ID) {
                 gateways.push({ text: '💳 زرین‌پال', callback_data: `deposit_gateway_zarinpal_${amount}` });
             }
-            if (config.botSettings.cardToCardEnabled) {
+            if (settings?.cardToCardEnabled) {
                 gateways.push({ text: '💳 کارت به کارت', callback_data: `deposit_gateway_card_${amount}` });
             }
 
@@ -143,8 +152,7 @@ export class WalletHandler {
             const user = await userRepo.findByChatId(BigInt(ctx.from.id));
             if (!user) return;
 
-            const gatewayFactory = new PaymentFactory();
-            const gateway = gatewayFactory.getPaymentGateway(method);
+            const gateway = PaymentFactory.create(method as any);
 
             // Create Payment Request
             const { paymentUrl, trackingCode } = await gateway.createPayment(amount, user.id, {
@@ -182,7 +190,10 @@ export class WalletHandler {
 
     async handleCardToCard(ctx: Context, amount: number) {
         try {
-            const cardNumber = config.botSettings.cardNumber;
+            const settings = await prisma.botSetting.findFirst();
+            const cardNumber = settings?.cardNumber;
+            const cardOwner = config.CARD_OWNER || ''; // From env or settings if available
+
             if (!cardNumber) {
                 return ctx.reply('❌ شماره کارت تنظیم نشده است.');
             }
@@ -190,13 +201,15 @@ export class WalletHandler {
             // Start User Custom Flow for Card to Card
             // This requires state management (e.g. asking for receipt)
             // simplified:
-            await ctx.editMessageText(`💳 پرداخت کارت به کارت\n\nمبلغ: ${amount.toLocaleString()} تومان\n\nشماره کارت:\n\`${cardNumber}\`\n\nلطفا مبلغ را واریز کرده و عکس فیش را ارسال کنید.`, {
+            await ctx.editMessageText(`💳 پرداخت کارت به کارت\n\nمبلغ: ${amount.toLocaleString()} تومان\n\nشماره کارت:\n\`${cardNumber}\`\n\n${cardOwner ? `👤 به نام: ${cardOwner}\n\n` : ''}لطفا مبلغ را واریز کرده و عکس فیش را ارسال کنید.`, {
                 parse_mode: 'Markdown'
             });
 
             // Implicitly we'd set user state here to WAITING_FOR_RECEIPT
-            const conversationHandler = new UserConversationHandler(ctx);
-            await conversationHandler.setState(UserState.WAITING_FOR_PAYMENT_PROOF, { amount });
+            const userId = ctx.from?.id;
+            if (userId) {
+                UserConversationHandler.setState(userId, UserState.WAITING_FOR_PAYMENT_PROOF, { amount });
+            }
 
         } catch (error) {
             logger.error('Error in handleCardToCard:', error);
