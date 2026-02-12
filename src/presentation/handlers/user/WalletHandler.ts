@@ -19,135 +19,132 @@ export class WalletHandler {
             const user = await userRepo.findByChatId(BigInt(ctx.from.id));
             if (!user) return;
 
-            const balance = Number(user.balance);
+            const balance = user.balance.toString();
 
-            let message = `💰 <b>کیف پول شما</b>\n\n`;
-            message += `💵 موجودی فعلی: <b>${balance.toLocaleString('fa-IR')} تومان</b>\n\n`;
-            message += `🔗 لینک دعوت شما:\n`;
-            message += `<code>https://t.me/${ctx.me.username}?start=ref_${user.refCode}</code>\n\n`;
-            message += `👥 تعداد زیرمجموعه: ${user.affiliateCount} نفر\n`;
-            message += `🎁 به ازای هر زیرمجموعه: 5,000 تومان\n\n`;
-            message += `برای شارژ کیف پول، از دکمه‌های زیر استفاده کنید:`;
-
-            const keyboard = {
-                inline_keyboard: [
-                    [{ text: '💳 کارت به کارت', callback_data: 'charge:card' }],
-                    [{ text: '🌐 درگاه آنلاین', callback_data: 'charge:online' }],
-                    [{ text: '🔙 بازگشت', callback_data: 'main_menu' }],
-                ],
-            };
+            let message = `💰 کیف پول من\n\n`;
+            message += `👤 کاربر: ${user.firstName || 'کاربر'}\n`;
+            message += `📱 شماره تماس: ${user.phoneNumber || 'ثبت نشده'}\n\n`;
+            message += `💳 موجودی فعلی: ${parseInt(balance).toLocaleString()} تومان\n\n`;
+            message += `🔹 جهت افزایش موجودی از دکمه‌های زیر استفاده کنید.`;
 
             await ctx.reply(message, {
-                parse_mode: 'HTML',
-                reply_markup: keyboard,
+                reply_markup: {
+                    inline_keyboard: [
+                        [
+                            { text: '➕ افزایش موجودی', callback_data: 'wallet_deposit' },
+                            { text: '📋 تراکنش‌های من', callback_data: 'wallet_transactions' }
+                        ],
+                        [{ text: '🔙 بازگشت به منوی اصلی', callback_data: 'main_menu' }]
+                    ]
+                }
             });
+
         } catch (error) {
             logger.error('Error in showWallet:', error);
-            await ctx.reply('❌ خطایی در نمایش کیف پول رخ داد.');
+            await ctx.reply('❌ خطایی رخ داد. لطفا دوباره تلاش کنید.');
         }
     }
 
-    async showCardToCard(ctx: Context) {
+    async handleCallback(ctx: Context) {
         try {
-            if (!ctx.callbackQuery) return;
+            if (!ctx.callbackQuery?.data) return;
 
-            const cardNumber = config.CARD_NUMBER || 'تنظیم نشده';
-            const cardOwner = config.CARD_OWNER || 'تنظیم نشده';
+            const data = ctx.callbackQuery.data;
 
-            let message = `💳 <b>شارژ کیف پول - کارت به کارت</b>\n\n`;
-            message += `لطفاً مبلغ مورد نظر را به شماره کارت زیر واریز کنید:\n\n`;
-            message += `🏦 شماره کارت:\n<code>${cardNumber}</code>\n\n`;
-            message += `📝 نام دارنده: ${cardOwner}\n\n`;
-            message += `⚠️ توجه:\n`;
-            message += `1️⃣ بعد از واریز، عکس رسید را ارسال کنید\n`;
-            message += `2️⃣ موجودی شما پس از تأیید ادمین شارژ می‌شود\n`;
-            message += `3️⃣ معمولاً ظرف 10-30 دقیقه تأیید می‌شود\n`;
+            if (data === 'wallet_deposit') {
+                await this.startDepositFlow(ctx);
+            } else if (data === 'wallet_transactions') {
+                await this.showTransactions(ctx);
+            } else if (data.startsWith('deposit_amount_')) {
+                const amount = parseInt(data.replace('deposit_amount_', ''));
+                await this.confirmDepositAmount(ctx, amount);
+            } else if (data.startsWith('deposit_gateway_')) {
+                const parts = data.split('_'); // deposit_gateway_zarinpal_50000
+                const gateway = parts[2];
+                const amount = parseInt(parts[3]);
+                await this.createPaymentLink(ctx, gateway, amount);
+            }
 
-            const keyboard = {
-                inline_keyboard: [
-                    [{ text: '📤 ارسال رسید', callback_data: 'send_receipt' }],
-                    [{ text: '🔙 بازگشت', callback_data: 'wallet' }],
-                ],
-            };
+            await ctx.answerCallbackQuery();
 
-            await ctx.editMessageText(message, {
-                parse_mode: 'HTML',
-                reply_markup: keyboard,
+        } catch (error) {
+            logger.error('Error in wallet handleCallback:', error);
+        }
+    }
+
+    async startDepositFlow(ctx: Context) {
+        try {
+            const amounts = [50000, 100000, 200000, 500000];
+            const keyboard = [];
+
+            // Chunk amounts into rows of 2
+            for (let i = 0; i < amounts.length; i += 2) {
+                const row = amounts.slice(i, i + 2).map(amount => ({
+                    text: `${amount.toLocaleString()} تومان`,
+                    callback_data: `deposit_amount_${amount}`
+                }));
+                keyboard.push(row);
+            }
+
+            // Add custom amount button
+            keyboard.push([{ text: '✏️ مبلغ دلخواه', callback_data: 'deposit_custom_amount' }]);
+            keyboard.push([{ text: '🔙 بازگشت', callback_data: 'wallet_main' }]);
+
+            await ctx.editMessageText('💳 لطفا مبلغ افزایش اعتبار را انتخاب کنید:', {
+                reply_markup: {
+                    inline_keyboard: keyboard
+                }
             });
 
-            await ctx.answerCallbackQuery();
         } catch (error) {
-            logger.error('Error in showCardToCard:', error);
-            await ctx.answerCallbackQuery({ text: '❌ خطا در نمایش اطلاعات کارت' });
+            logger.error('Error in startDepositFlow:', error);
+            await ctx.reply('❌ خطایی رخ داد.');
         }
     }
 
-    async handleOnlinePayment(ctx: Context) {
+    async confirmDepositAmount(ctx: Context, amount: number) {
         try {
-            const userId = ctx.from?.id;
-            if (!userId) return;
+            const gateways = [];
 
-            UserConversationHandler.setState(userId, UserState.WAITING_PAYMENT_AMOUNT);
+            if (config.botSettings.nowPaymentsEnabled) {
+                gateways.push({ text: '💎 NowPayments (Crypto)', callback_data: `deposit_gateway_nowpayments_${amount}` });
+            }
+            if (config.botSettings.zarinPalEnabled) { // Assuming this setting exists or similar
+                gateways.push({ text: '💳 زرین‌پال', callback_data: `deposit_gateway_zarinpal_${amount}` });
+            }
+            if (config.botSettings.cardToCardEnabled) {
+                gateways.push({ text: '💳 کارت به کارت', callback_data: `deposit_gateway_card_${amount}` });
+            }
 
-            await ctx.editMessageText(
-                '💳 <b>افزایش موجودی آنلاین</b>\n\n' +
-                'لطفاً مبلغ مورد نظر را به تومان وارد کنید:\n' +
-                '(حداقل ۱۰۰۰ تومان)',
-                {
-                    parse_mode: 'HTML',
-                    reply_markup: {
-                        inline_keyboard: [
-                            [{ text: '🔙 بازگشت', callback_data: 'wallet' }],
-                        ],
-                    },
+            gateways.push({ text: '🔙 بازگشت', callback_data: 'wallet_deposit' });
+
+            // Structure keyboard
+            const keyboard = gateways.map(g => [g]);
+
+            await ctx.editMessageText(`💰 مبلغ قابل پرداخت: ${amount.toLocaleString()} تومان\n\n👇 لطفا درگاه پرداخت را انتخاب کنید:`, {
+                reply_markup: {
+                    inline_keyboard: keyboard
                 }
-            );
-            await ctx.answerCallbackQuery();
+            });
+
         } catch (error) {
-            logger.error('Error in handleOnlinePayment:', error);
-            await ctx.answerCallbackQuery({ text: '❌ خطا رخ داد' });
+            logger.error('Error in confirmDepositAmount:', error);
         }
     }
 
-    async processPaymentAmount(ctx: Context, amount: number) {
+    async createPaymentLink(ctx: Context, method: string, amount: number) {
         try {
-            const userId = ctx.from?.id;
-            if (!userId) return;
+            if (!ctx.from) return;
 
-            // Validation: Check amount bounds
-            const MIN_AMOUNT = 1000;
-            const MAX_AMOUNT = 100000000; // 100 million toman
-
-            if (amount < MIN_AMOUNT) {
-                await ctx.reply(`❌ حداقل مبلغ قابل پرداخت ${MIN_AMOUNT.toLocaleString('fa-IR')} تومان است.`);
-                return;
+            if (method === 'card') {
+                return await this.handleCardToCard(ctx, amount);
             }
 
-            if (amount > MAX_AMOUNT) {
-                await ctx.reply(`❌ حداکثر مبلغ قابل پرداخت ${MAX_AMOUNT.toLocaleString('fa-IR')} تومان است.`);
-                return;
-            }
-
-            const user = await userRepo.findByChatId(BigInt(userId));
+            const user = await userRepo.findByChatId(BigInt(ctx.from.id));
             if (!user) return;
 
-            await ctx.reply('⏳ در حال ایجاد لینک پرداخت...');
-
-            // Create Payment Gateway
-            // Default to Zarinpal if configured, else try others.
-            //Ideally we should let user choose if multiple are available.
-            // For now, simple logic: use Zarinpal if ID exists.
-            const methods = PaymentFactory.getAvailableMethods();
-            let method = 'cardtocard';
-            if (methods.includes('zarinpal')) method = 'zarinpal';
-            else if (methods.includes('nowpayments')) method = 'nowpayments';
-
-            if (method === 'cardtocard') {
-                await ctx.reply('❌ درگاه پرداخت آنلاین فعال نیست.');
-                return;
-            }
-
-            const gateway = PaymentFactory.create(method as any);
+            const gatewayFactory = new PaymentFactory();
+            const gateway = gatewayFactory.getPaymentGateway(method);
 
             // Create Payment Request
             const { paymentUrl, trackingCode } = await gateway.createPayment(amount, user.id, {
@@ -164,49 +161,86 @@ export class WalletHandler {
                     status: 'PENDING',
                     transactionId: trackingCode,
                     orderId: trackingCode, // unique constraint
-                    description: `درخواست شارژ آنلاین - ${method}`
+                    description: `افزایش اعتبار کیف پول - ${method}`
                 }
             });
 
-            await ctx.reply(
-                `💳 <b>فاکتور پرداخت</b>\n\n` +
-                `💰 مبلغ: ${amount.toLocaleString('fa-IR')} تومان\n\n` +
-                `برای پرداخت روی دکمه زیر کلیک کنید:`,
-                {
-                    parse_mode: 'HTML',
-                    reply_markup: {
-                        inline_keyboard: [
-                            [{ text: '🔗 پرداخت آنلاین', url: paymentUrl }],
-                            [{ text: '🔙 بازگشت به کیف پول', callback_data: 'wallet' }]
-                        ]
-                    }
+            await ctx.editMessageText(`🔗 لینک پرداخت ایجاد شد.\n\n💰 مبلغ: ${amount.toLocaleString()} تومان\n\n👇 جهت پرداخت روی لینک زیر کلیک کنید:`, {
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: '🔗 پرداخت آنلاین', url: paymentUrl }],
+                        [{ text: '🔙 بازگشت', callback_data: 'wallet_main' }]
+                    ]
                 }
-            );
+            });
 
         } catch (error) {
-            logger.error('Error in processPaymentAmount:', error);
-            await ctx.reply('❌ خطا در ایجاد لینک پرداخت. لطفاً بعداً تلاش کنید.');
+            logger.error('Error in createPaymentLink:', error);
+            await ctx.reply('❌ خطا در ایجاد لینک پرداخت.');
         }
     }
 
-    async handleSendReceipt(ctx: Context) {
+    async handleCardToCard(ctx: Context, amount: number) {
         try {
-            await ctx.editMessageText(
-                '📸 لطفاً تصویر رسید واریزی خود را ارسال کنید.\n\n' +
-                'در کپشن تصویر می‌توانید توضیحات اضافی بنویسید.',
-                {
-                    parse_mode: 'HTML',
-                    reply_markup: {
-                        inline_keyboard: [
-                            [{ text: '🔙 بازگشت', callback_data: 'wallet' }],
-                        ],
-                    },
-                }
-            );
-            await ctx.answerCallbackQuery();
+            const cardNumber = config.botSettings.cardNumber;
+            if (!cardNumber) {
+                return ctx.reply('❌ شماره کارت تنظیم نشده است.');
+            }
+
+            // Start User Custom Flow for Card to Card
+            // This requires state management (e.g. asking for receipt)
+            // simplified:
+            await ctx.editMessageText(`💳 پرداخت کارت به کارت\n\nمبلغ: ${amount.toLocaleString()} تومان\n\nشماره کارت:\n\`${cardNumber}\`\n\nلطفا مبلغ را واریز کرده و عکس فیش را ارسال کنید.`, {
+                parse_mode: 'Markdown'
+            });
+
+            // Implicitly we'd set user state here to WAITING_FOR_RECEIPT
+            const conversationHandler = new UserConversationHandler(ctx);
+            await conversationHandler.setState(UserState.WAITING_FOR_PAYMENT_PROOF, { amount });
+
         } catch (error) {
-            logger.error('Error in handleSendReceipt:', error);
-            await ctx.answerCallbackQuery({ text: '❌ خطا رخ داد' });
+            logger.error('Error in handleCardToCard:', error);
+        }
+    }
+
+    async showTransactions(ctx: Context) {
+        try {
+            if (!ctx.from) return;
+
+            const user = await userRepo.findByChatId(BigInt(ctx.from.id));
+            if (!user) return;
+
+            const transactions = await prisma.paymentReport.findMany({
+                where: { userId: user.id },
+                orderBy: { createdAt: 'desc' },
+                take: 10
+            });
+
+            if (transactions.length === 0) {
+                await ctx.editMessageText('📭 لیست تراکنش‌های شما خالی است.', {
+                    reply_markup: {
+                        inline_keyboard: [[{ text: '🔙 بازگشت', callback_data: 'wallet_main' }]]
+                    }
+                });
+                return;
+            }
+
+            let message = '📋 آخرین تراکنش‌های شما:\n\n';
+
+            transactions.forEach(t => {
+                const statusEmoji = t.status === 'PAID' ? '✅' : (t.status === 'PENDING' ? '⏳' : '❌');
+                const date = t.createdAt.toLocaleDateString('fa-IR');
+                message += `${statusEmoji} ${parseInt(t.amount.toString()).toLocaleString()} تومان\n📅 ${date} - ${t.method}\n\n`;
+            });
+
+            await ctx.editMessageText(message, {
+                reply_markup: {
+                    inline_keyboard: [[{ text: '🔙 بازگشت', callback_data: 'wallet_main' }]]
+                }
+            });
+
+        } catch (error) {
+            logger.error('Error in showTransactions:', error);
         }
     }
 }

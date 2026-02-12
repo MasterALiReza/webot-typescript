@@ -6,6 +6,7 @@ import { XUIAdapter } from './XUIAdapter';
 import { SUIPanelAdapter } from './SUIPanelAdapter';
 import { WGDashboardAdapter } from './WGDashboardAdapter';
 import { MikrotikAdapter } from './MikrotikAdapter';
+import { AlirezaAdapter } from './AlirezaAdapter';
 import { prisma } from '../database/prisma';
 
 export class PanelFactory {
@@ -33,6 +34,10 @@ export class PanelFactory {
                 });
 
             case 'X_UI':
+                // Check if it's actually Alireza panel (often used interchangeably)
+                // For now, simple logic, maybe extend based on explicit type later 
+                // But if strict type is X_UI, use XUIAdapter. 
+                // If user selected 'ALIREZA' (if we added it to enum), we'd use AlirezaAdapter.
                 return new XUIAdapter(config);
 
             case 'S_UI':
