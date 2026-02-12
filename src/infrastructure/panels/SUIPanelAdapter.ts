@@ -24,7 +24,7 @@ export class SUIPanelAdapter implements IPanelAdapter {
     constructor(private config: SUIPanelConfig) {
         this.client = axios.create({
             baseURL: config.url,
-            timeout: 30000,
+            timeout: 60000, // Increased to 60 seconds
             headers: {
                 'Content-Type': 'application/json',
             },

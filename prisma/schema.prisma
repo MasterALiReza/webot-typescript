@@ -182,6 +182,7 @@ model PaymentReport {
 enum PaymentMethod {
   CARD_TO_CARD
   NOWPAYMENTS
+  ZARINPAL
   AQAYE_PARDAKHT
   DIGI_PAY
 }

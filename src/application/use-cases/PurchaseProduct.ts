@@ -1,8 +1,8 @@
 import { UserRepository } from '../../infrastructure/database/repositories/UserRepository';
 import { ProductRepository } from '../../infrastructure/database/repositories/ProductRepository';
-import { InvoiceRepository } from '../../infrastructure/database/repositories/InvoiceRepository';
 import { PanelFactory } from '../../infrastructure/panels/PanelFactory';
 import { InsufficientBalanceError, NotFoundError, ValidationError } from '../../core/errors';
+import { prisma } from '../../infrastructure/database/prisma';
 import crypto from 'crypto';
 
 interface PurchaseInput {
@@ -20,11 +20,13 @@ interface PurchaseResult {
 export class PurchaseProductUseCase {
     constructor(
         private userRepo: UserRepository,
-        private productRepo: ProductRepository,
-        private invoiceRepo: InvoiceRepository
+        private productRepo: ProductRepository
     ) { }
 
     async execute(input: PurchaseInput): Promise<PurchaseResult> {
+        let panelUsername: string | null = null;
+        let panel: any = null;
+
         try {
             // 1. Get user
             const user = await this.userRepo.findById(input.userId);
@@ -38,6 +40,11 @@ export class PurchaseProductUseCase {
                 throw new NotFoundError('Product');
             }
 
+            panel = product.panel;
+            if (!panel) {
+                throw new ValidationError('Product has no associated panel');
+            }
+
             // 3. Determine price and check balance
             const priceToDeduct = input.finalPrice !== undefined ? input.finalPrice : Number(product.price);
 
@@ -47,15 +54,10 @@ export class PurchaseProductUseCase {
 
             // 4. Generate username
             const username = this.generateUsername(user.chatId);
+            panelUsername = username;
 
-            // 5. Create user on panel
-            const panel = product.panel;
-            if (!panel) {
-                throw new ValidationError('Product has no associated panel');
-            }
-
+            // 5. Create user on panel FIRST (before deducting balance)
             const panelAdapter = PanelFactory.create(panel);
-            // TODO: Handle panel error gracefully
             const panelUser = await panelAdapter.createUser({
                 username,
                 volume: product.volume,
@@ -63,48 +65,47 @@ export class PurchaseProductUseCase {
                 inbounds: panel.inbounds || undefined,
             });
 
-            // 6. Deduct balance
-            if (priceToDeduct > 0) {
-                await this.userRepo.deductBalance(user.id, priceToDeduct);
-            }
+            // 6. Use Prisma transaction for atomic DB operations
+            const invoice = await prisma.$transaction(async (tx) => {
+                // Deduct balance atomically
+                if (priceToDeduct > 0) {
+                    const balanceUpdate = await tx.user.updateMany({
+                        where: {
+                            id: user.id,
+                            balance: { gte: priceToDeduct }
+                        },
+                        data: { balance: { decrement: priceToDeduct } },
+                    });
 
-            // 7. Process Referral Reward
-            if (user.referredBy) {
-                // Check if affiliate system enabled (could handle this via config/db setting)
-                // For simplicity, hardcode reward or fetch from setting. 
-                // Let's assume a fixed reward for now as per plan, or ideally fetch from DB.
-                // Since I don't want to add complexity of fetching settings right now, let's go with fixed 5000 as mentioned in ProfileHandler.
-                const rewardAmount = 5000;
+                    if (balanceUpdate.count === 0) {
+                        throw new InsufficientBalanceError();
+                    }
+                }
 
-                // Credit referrer
-                // user.referredBy is BigInt (chatId) based on schema
-                // But addBalance takes ID (number). We need to find referrer by chatId first.
-                // Or update addBalance to take chatId?
-                // Let's us updateByChatId which is generic, or add specific method.
-                // UserRepository has updateByChatId.
+                // Process Referral Reward
+                if (user.referredBy) {
+                    const rewardAmount = 5000;
+                    await tx.user.updateMany({
+                        where: { chatId: user.referredBy },
+                        data: { balance: { increment: rewardAmount } }
+                    });
+                }
 
-                await this.userRepo.updateByChatId(user.referredBy, {
-                    balance: { increment: rewardAmount }
+                // Create invoice
+                return await tx.invoice.create({
+                    data: {
+                        userId: user.id,
+                        productId: product.id,
+                        panelId: panel.id,
+                        username,
+                        configUrl: panelUser.subscriptionUrl || '',
+                        subscriptionUrl: panelUser.subscriptionUrl || '',
+                        serviceLocation: panel.name,
+                        productName: product.name,
+                        productPrice: product.price,
+                        expiresAt: new Date(panelUser.expire * 1000),
+                    },
                 });
-
-                // Notify referrer?
-                // We don't have access to bot instance here to send message.
-                // Notification should be handled by caller or via event bus.
-                // For now, silent reward.
-            }
-
-            // 7. Create invoice
-            const invoice = await this.invoiceRepo.create({
-                userId: user.id,
-                productId: product.id,
-                panelId: panel.id,
-                username,
-                configUrl: panelUser.subscriptionUrl || '',
-                subscriptionUrl: panelUser.subscriptionUrl || '',
-                serviceLocation: panel.name,
-                productName: product.name,
-                productPrice: product.price,
-                expiresAt: new Date(panelUser.expire * 1000),
             });
 
             return {
@@ -112,6 +113,17 @@ export class PurchaseProductUseCase {
                 invoice,
             };
         } catch (error: any) {
+            // Rollback: Remove user from panel if DB transaction failed
+            if (panelUsername && panel) {
+                try {
+                    const panelAdapter = PanelFactory.create(panel);
+                    await panelAdapter.removeUser(panelUsername);
+                } catch (rollbackError) {
+                    // Log rollback failure but don't throw
+                    console.error('Failed to rollback panel user:', rollbackError);
+                }
+            }
+
             return {
                 success: false,
                 error: error.message,

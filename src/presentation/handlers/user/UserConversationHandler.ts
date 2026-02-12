@@ -15,26 +15,64 @@ interface UserSession {
     data: any;
 }
 
-const userSessions = new Map<number, UserSession>();
+interface UserSessionWithExpiry extends UserSession {
+    expiresAt: number;
+}
+
+const userSessions = new Map<number, UserSessionWithExpiry>();
+const SESSION_TTL = 30 * 60 * 1000; // 30 minutes
+
+// Cleanup expired sessions every 10 minutes
+setInterval(() => {
+    const now = Date.now();
+    for (const [userId, session] of userSessions.entries()) {
+        if (session.expiresAt < now) {
+            userSessions.delete(userId);
+        }
+    }
+}, 10 * 60 * 1000);
 
 export class UserConversationHandler {
     private static walletHandler = new WalletHandler();
 
     static getSession(userId: number): UserSession {
-        if (!userSessions.has(userId)) {
-            userSessions.set(userId, { state: UserState.IDLE, data: {} });
+        const sessionWithExpiry = userSessions.get(userId);
+
+        // Check if session exists and not expired
+        if (sessionWithExpiry && sessionWithExpiry.expiresAt > Date.now()) {
+            // Refresh expiry on access
+            sessionWithExpiry.expiresAt = Date.now() + SESSION_TTL;
+            return sessionWithExpiry;
         }
-        return userSessions.get(userId)!;
+
+        // Create new session if none exists or expired
+        const newSession: UserSessionWithExpiry = {
+            state: UserState.IDLE,
+            data: {},
+            expiresAt: Date.now() + SESSION_TTL
+        };
+        userSessions.set(userId, newSession);
+        return newSession;
     }
 
     static setState(userId: number, state: UserState, data: any = {}) {
-        const session = this.getSession(userId);
+        const session = userSessions.get(userId) || {
+            state: UserState.IDLE,
+            data: {},
+            expiresAt: Date.now() + SESSION_TTL
+        };
         session.state = state;
         session.data = { ...session.data, ...data };
+        session.expiresAt = Date.now() + SESSION_TTL; // Refresh expiry
+        userSessions.set(userId, session);
     }
 
     static clearSession(userId: number) {
-        userSessions.set(userId, { state: UserState.IDLE, data: {} });
+        userSessions.set(userId, {
+            state: UserState.IDLE,
+            data: {},
+            expiresAt: Date.now() + SESSION_TTL
+        });
     }
 
     static async handleMessage(ctx: Context, next: () => Promise<void>): Promise<void> {

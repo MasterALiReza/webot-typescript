@@ -41,7 +41,7 @@ export class AlirezaAdapter implements IPanelAdapter {
     constructor(private config: AlirezaConfig) {
         this.client = axios.create({
             baseURL: config.url,
-            timeout: 30000,
+            timeout: 60000, // Increased to 60 seconds
         });
     }
 

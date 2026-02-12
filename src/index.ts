@@ -243,7 +243,6 @@ bot.callbackQuery('admin:payment:zarinpal', adminAuthMiddleware(), PaymentSettin
 bot.callbackQuery('admin:payment:crypto', adminAuthMiddleware(), PaymentSettingsHandler.handleCryptoSettings);
 bot.callbackQuery('admin:texts', adminAuthMiddleware(), TextCustomizationHandler.handleTextsMenu);
 bot.callbackQuery('admin:channels', adminAuthMiddleware(), ChannelHandler.handleChannelsMenu);
-bot.callbackQuery('admin:channels', adminAuthMiddleware(), ChannelHandler.handleChannelsMenu);
 bot.callbackQuery('admin:channel:add', adminAuthMiddleware(), ChannelHandler.handleAddChannel);
 
 bot.callbackQuery('admin:discounts', adminAuthMiddleware(), DiscountHandler.handleDiscountsMenu);

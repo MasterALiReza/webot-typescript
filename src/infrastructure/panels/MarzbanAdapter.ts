@@ -17,7 +17,9 @@ export class MarzbanAdapter implements IPanelAdapter {
     constructor(private config: MarzbanConfig) {
         this.client = axios.create({
             baseURL: config.url,
-            timeout: 30000,
+            timeout: 60000, // Increased to 60 seconds
+            maxRedirects: 5,
+            validateStatus: (status) => status >= 200 && status < 500,
         });
     }
 

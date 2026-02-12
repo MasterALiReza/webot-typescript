@@ -190,17 +190,33 @@ export class PurchaseHandler {
             if (!ctx.from || !ctx.callbackQuery) return;
             const userId = ctx.from.id;
 
+            // Idempotency check: prevent double purchase
+
+            // Check if there's already a pending purchase for this user
+            const { UserConversationHandler } = require('./UserConversationHandler');
+            const session = UserConversationHandler.getSession(userId);
+
+            if (session.data.pendingPurchase) {
+                await ctx.answerCallbackQuery({
+                    text: '⚠️ درخواست قبلی شما در حال پردازش است. لطفاً صبر کنید.',
+                    show_alert: true
+                });
+                return;
+            }
+
+            // Mark purchase as pending
+            session.data.pendingPurchase = true;
+
             const user = await userRepo.findByChatId(BigInt(userId));
             if (!user) {
+                delete session.data.pendingPurchase;
                 await ctx.answerCallbackQuery({ text: 'خطا: کاربر یافت نشد' });
                 return;
             }
 
-            const { UserConversationHandler } = require('./UserConversationHandler');
-            const session = UserConversationHandler.getSession(userId);
-
             const product = await productRepo.findById(productId);
             if (!product) {
+                delete session.data.pendingPurchase;
                 await ctx.answerCallbackQuery({ text: 'محصول یافت نشد' });
                 return;
             }
@@ -220,6 +236,7 @@ export class PurchaseHandler {
 
             // Check Balance (Double check)
             if (Number(user.balance) < finalPrice) {
+                delete session.data.pendingPurchase;
                 await ctx.answerCallbackQuery({ text: '❌ موجودی کافی نیست', show_alert: true });
                 return;
             }
@@ -227,37 +244,15 @@ export class PurchaseHandler {
             await ctx.answerCallbackQuery({ text: 'در حال پردازش...' });
             await ctx.editMessageText('⏳ در حال ایجاد سرویس...');
 
-            // Deduct Balance & Create Service
-            // We need to pass the actual price paid to useCase or handle deduction here?
-            // PurchaseProductUseCase handles deduction. We should update it to accept 'price' override?
-            // Or we handle deduction here and pass 'paid=true' to useCase?
-            // Let's modify purchase use case or easier: just ensure useCase uses the price we want?
-            // Currently PurchaseProductUseCase fetches product price.
-            // I should probably manually deduct balance diff if useCase deducts full price? 
-            // Better: Update PurchaseProductUseCase to accept 'finalPrice'.
-            // For now, let's look at PurchaseProductUseCase.
-            // If I can't easily change UseCase, I can:
-            // 1. Deduct (price - finalPrice) back to user? (Refund discount)
-            // 2. Or if finalPrice is 0, special handling.
-
-            // Let's check PurchaseProductUseCase. If it's strict, I might need to update it.
-            // Assuming I can't check it right now, I will modify it if needed.
-            // Actually I should view it.
-
-            // ... (View UseCase first?)
-            // Let's assume I'll update UseCase next or it allows price.
-            // For now, let's implement the logic assuming UseCase takes an optional 'price' or 'discount' argument.
-
-            // Wait, I can't assume. I should check `PurchaseProductUseCase`.
-            // Let's just write the code to call it with a TODO or best guess, asking to check UseCase.
-
-            // Standard approach:
-            const useCase = new PurchaseProductUseCase(userRepo, productRepo, invoiceRepo);
+            const useCase = new PurchaseProductUseCase(userRepo, productRepo);
             const result = await useCase.execute({
                 userId: user.id,
                 productId,
-                finalPrice: finalPrice // Passing custom price
+                finalPrice: finalPrice
             });
+
+            // Clear pending flag
+            delete session.data.pendingPurchase;
 
             if (result.success && result.invoice) {
                 // Increment discount usage if used
@@ -293,6 +288,12 @@ export class PurchaseHandler {
             }
         } catch (error) {
             logger.error('Error in executePurchase:', error);
+
+            // Clear pending flag on error
+            const { UserConversationHandler } = require('./UserConversationHandler');
+            const session = UserConversationHandler.getSession(ctx.from?.id || 0);
+            delete session.data.pendingPurchase;
+
             await ctx.editMessageText('❌ خطایی در نهایی‌سازی خرید رخ داد.');
         }
     }

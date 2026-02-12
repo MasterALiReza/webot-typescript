@@ -34,7 +34,7 @@ export class MikrotikAdapter implements IPanelAdapter {
 
         this.client = axios.create({
             baseURL: config.url,
-            timeout: 30000,
+            timeout: 60000, // Increased to 60 seconds
             auth: {
                 username: config.username,
                 password: config.password,

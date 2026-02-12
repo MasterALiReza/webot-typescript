@@ -1,4 +1,5 @@
 import { Context } from 'grammy';
+import { PaymentMethod } from '@prisma/client';
 import { UserRepository } from '../../../infrastructure/database/repositories/UserRepository';
 import { loadConfig } from '../../../shared/config';
 import { logger } from '../../../shared/logger';
@@ -113,6 +114,20 @@ export class WalletHandler {
             const userId = ctx.from?.id;
             if (!userId) return;
 
+            // Validation: Check amount bounds
+            const MIN_AMOUNT = 1000;
+            const MAX_AMOUNT = 100000000; // 100 million toman
+
+            if (amount < MIN_AMOUNT) {
+                await ctx.reply(`❌ حداقل مبلغ قابل پرداخت ${MIN_AMOUNT.toLocaleString('fa-IR')} تومان است.`);
+                return;
+            }
+
+            if (amount > MAX_AMOUNT) {
+                await ctx.reply(`❌ حداکثر مبلغ قابل پرداخت ${MAX_AMOUNT.toLocaleString('fa-IR')} تومان است.`);
+                return;
+            }
+
             const user = await userRepo.findByChatId(BigInt(userId));
             if (!user) return;
 
@@ -145,27 +160,7 @@ export class WalletHandler {
                 data: {
                     userId: user.id,
                     amount: amount,
-                    method: method === 'zarinpal' ? 'AQAYE_PARDAKHT' : 'NOWPAYMENTS',
-                    // NOTE: Mapping 'zarinpal' to 'AQAYE_PARDAKHT' temporarily because 'ZARINPAL' is missing in Prisma Schema Enum.
-                    // This is a known technical debt to be resolved in next schema migration. 
-                    // Schema has AQAYE_PARDAKHT, NOWPAYMENTS, DIGI_PAY, CARD_TO_CARD. 
-                    // Zarinpal is missing in PaymentMethod Enum? 
-                    // Let's check schema. If missing, we might need to map it to one of existing or ADD it. 
-                    // Looking at schema from previous step...
-                    // enum PaymentMethod { CARD_TO_CARD, NOWPAYMENTS, AQAYE_PARDAKHT, DIGI_PAY }
-                    // Zarinpal is NOT there. I should probably use AQAYE_PARDAKHT as placeholder or better, generic.
-                    // Or I should update schema. But schema update requires migration. 
-                    // Let's check if I can update schema. Yes I can.
-                    // But for now to avoid migration overhead in this turn, I will use AQAYE_PARDAKHT as a fallback mapping 
-                    // OR simple update logic if I can run migration.
-                    // Actually, I should update the schema to be correct.
-                    // BUT, I can't run interactive migration commands easily without shell access sometimes blocking.
-                    // Let's check if I can just use 'AQAYE_PARDAKHT' for now or 'NOWPAYMENTS'.
-                    // Actually, let's map 'paymentUrl' and 'trackingCode'.
-                    // I will strictly stick to the schema.
-                    // I will map 'zarinpal' to 'AQAYE_PARDAKHT' for now as they are similar (Iranian gateways).
-                    // This is a temporary hack. 
-                    // BETTER: I'll check if I can update schema quickly.
+                    method: (method === 'zarinpal' ? PaymentMethod.ZARINPAL : PaymentMethod.NOWPAYMENTS),
                     status: 'PENDING',
                     transactionId: trackingCode,
                     orderId: trackingCode, // unique constraint

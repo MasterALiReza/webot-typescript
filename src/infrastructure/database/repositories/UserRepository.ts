@@ -64,10 +64,18 @@ export class UserRepository {
     }
 
     async deductBalance(id: number, amount: number): Promise<void> {
-        await prisma.user.update({
-            where: { id },
+        // Use atomic update with check to prevent negative balance
+        const result = await prisma.user.updateMany({
+            where: {
+                id,
+                balance: { gte: amount } // Only update if balance is sufficient
+            },
             data: { balance: { decrement: amount } },
         });
+
+        if (result.count === 0) {
+            throw new Error('Insufficient balance or user not found');
+        }
     }
 
     async setStep(chatId: bigint, step: string): Promise<void> {
