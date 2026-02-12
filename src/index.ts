@@ -110,9 +110,7 @@ bot.callbackQuery(/^remove_discount:(\d+)$/, async (ctx) => {
 // USER CALLBACK HANDLERS - Wallet
 // ========================
 bot.callbackQuery('wallet', (ctx) => walletHandler.showWallet(ctx));
-bot.callbackQuery('charge:card', (ctx) => walletHandler.showCardToCard(ctx));
-bot.callbackQuery('charge:online', (ctx) => walletHandler.handleOnlinePayment(ctx));
-bot.callbackQuery('send_receipt', (ctx) => walletHandler.handleSendReceipt(ctx));
+bot.callbackQuery(/^(wallet_|deposit_)/, (ctx) => walletHandler.handleCallback(ctx));
 
 // ========================
 // ADMIN CALLBACK HANDLERS - Main Menu

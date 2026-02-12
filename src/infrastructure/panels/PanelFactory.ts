@@ -6,7 +6,7 @@ import { XUIAdapter } from './XUIAdapter';
 import { SUIPanelAdapter } from './SUIPanelAdapter';
 import { WGDashboardAdapter } from './WGDashboardAdapter';
 import { MikrotikAdapter } from './MikrotikAdapter';
-import { AlirezaAdapter } from './AlirezaAdapter';
+
 import { prisma } from '../database/prisma';
 
 export class PanelFactory {

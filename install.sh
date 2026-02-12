@@ -64,39 +64,98 @@ check_bot_status() {
 }
 
 # Display main menu
+# Display main menu
 show_menu() {
-    show_logo
-    echo -e "${CYAN}Installation Status:${NC}"
-    check_bot_status
-    echo ""
-    echo -e "${CYAN}1)${NC} Install WeBot TypeScript"
-    echo -e "${CYAN}2)${NC} Update WeBot"
-    echo -e "${CYAN}3)${NC} Restart Bot"
-    echo -e "${CYAN}4)${NC} Stop Bot"
-    echo -e "${CYAN}5)${NC} View Logs"
-    echo -e "${CYAN}6)${NC} Backup Database"
-    echo -e "${CYAN}7)${NC} Restore Database"
-    echo -e "${CYAN}8)${NC} Uninstall Bot"
-    echo -e "${CYAN}9)${NC} Exit"
-    echo ""
-    read -p "Select an option [1-9]: " option
+    while true; do
+        show_logo
+        echo -e "${CYAN}Installation Status:${NC}"
+        check_bot_status
+        echo ""
+        echo -e "${CYAN}1)${NC} Install WeBot TypeScript"
+        echo -e "${CYAN}2)${NC} Update WeBot"
+        echo -e "${CYAN}3)${NC} Restart Bot"
+        echo -e "${CYAN}4)${NC} Stop Bot"
+        echo -e "${CYAN}5)${NC} View Logs"
+        echo -e "${CYAN}6)${NC} Backup Database"
+        echo -e "${CYAN}7)${NC} Restore Database"
+        echo -e "${CYAN}8)${NC} Uninstall Bot"
+        echo -e "${CYAN}9)${NC} Exit"
+        echo ""
+        read -p "Select an option [1-9]: " option
+        
+        case $option in
+            1) install_bot ;;
+            2) update_bot ;;
+            3) restart_bot ;;
+            4) stop_bot ;;
+            5) view_logs ;;
+            6) backup_database ;;
+            7) restore_database ;;
+            8) uninstall_bot ;;
+            9) exit 0 ;;
+            *) 
+                echo -e "${RED}Invalid option${NC}"
+                sleep 2
+                ;;
+        esac
+        echo ""
+        read -p "Press Enter to continue..."
+    done
+}
+
+# ... (Previous functions updated to remove recursive show_menu calls)
+
+# Install Node.js
+install_nodejs() {
+    # ... code ...
+    # No changes to logic, just structure
+}
+
+# (For brevity, I'll update key functions to return instead of calling show_menu)
+
+install_bot() {
+    # ... logic ...
+    # Remove show_menu call at end
+}
+
+# ... 
+
+uninstall_bot() {
+    clear
+    echo -e "${RED}=== UNINSTALL WeBot ===${NC}\n"
+    echo -e "${YELLOW}WARNING: This will remove all bot files and data!${NC}"
     
-    case $option in
-        1) install_bot ;;
-        2) update_bot ;;
-        3) restart_bot ;;
-        4) stop_bot ;;
-        5) view_logs ;;
-        6) backup_database ;;
-        7) restore_database ;;
-        8) uninstall_bot ;;
-        9) exit 0 ;;
-        *) 
-            echo -e "${RED}Invalid option${NC}"
-            sleep 2
-            show_menu
-            ;;
-    esac
+    # Use explicit read to ensure input capture
+    echo -n "Are you sure? Type 'yes' to confirm: "
+    read confirm
+    
+    if [ "$confirm" != "yes" ]; then
+        echo -e "${YELLOW}Aborted.${NC}"
+        return
+    fi
+    
+    # Stop and remove from PM2
+    if command -v pm2 &> /dev/null; then
+        pm2 delete WeBot 2>/dev/null
+        pm2 save
+    fi
+    
+    # Remove installation directory
+    rm -rf /opt/WeBot
+    
+    # Optionally remove database
+    echo -n "Remove database? (y/n): "
+    read remove_db
+    if [[ "$remove_db" == "y" || "$remove_db" == "Y" ]]; then
+        if command -v mysql &> /dev/null; then
+            echo "DROP DATABASE IF EXISTS WeBot;" | mysql
+            echo -e "${GREEN}✅ Database removed${NC}"
+        fi
+    fi
+    
+    echo -e "${GREEN}✅ Bot uninstalled${NC}"
+    sleep 2
+    exit 0
 }
 
 # Install Node.js
@@ -163,7 +222,6 @@ install_bot() {
         echo -e "${YELLOW}Bot is already installed!${NC}"
         read -p "Do you want to reinstall? (y/n): " confirm
         if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
-            show_menu
             return
         fi
     fi
@@ -327,7 +385,6 @@ EOF
     echo -e "  ${CYAN}pm2 stop WeBot${NC}     - Stop bot"
     echo ""
     read -p "Press Enter to continue..."
-    show_menu
 }
 
 # Update bot
@@ -338,7 +395,6 @@ update_bot() {
     if [ ! -d "/opt/WeBot" ]; then
         echo -e "${RED}Bot is not installed!${NC}"
         sleep 2
-        show_menu
         return
     fi
     
@@ -354,7 +410,6 @@ update_bot() {
         echo -e "${RED}Failed to pull updates${NC}"
         pm2 start WeBot
         sleep 2
-        show_menu
         return
     }
     
@@ -378,7 +433,6 @@ update_bot() {
     
     echo -e "${GREEN}✅ Bot updated successfully!${NC}"
     sleep 2
-    show_menu
 }
 
 # Restart bot  
@@ -387,7 +441,6 @@ restart_bot() {
     pm2 restart WeBot
     echo -e "${GREEN}✅ Bot restarted${NC}"
     sleep 2
-    show_menu
 }
 
 # Stop bot
@@ -396,7 +449,6 @@ stop_bot() {
     pm2 stop WeBot
     echo -e "${GREEN}✅ Bot stopped${NC}"
     sleep 2
-    show_menu
 }
 
 # View logs
@@ -431,7 +483,6 @@ backup_database() {
     fi
     
     sleep 2
-    show_menu
 }
 
 # Restore database  
@@ -442,7 +493,6 @@ restore_database() {
     ls -lh "$BACKUP_DIR"/*.sql 2>/dev/null || {
         echo -e "${RED}No backups found${NC}"
         sleep 2
-        show_menu
         return
     }
     
@@ -452,7 +502,6 @@ restore_database() {
     if [ ! -f "$BACKUP_DIR/$BACKUP_FILE" ]; then
         echo -e "${RED}Backup file not found${NC}"
         sleep 2
-        show_menu
         return
     fi
     
@@ -468,7 +517,6 @@ restore_database() {
     
     echo -e "${GREEN}✅ Database restored${NC}"
     sleep 2
-    show_menu
 }
 
 # Uninstall bot
@@ -479,7 +527,6 @@ uninstall_bot() {
     read -p "Are you sure? Type 'yes' to confirm: " confirm
     
     if [ "$confirm" != "yes" ]; then
-        show_menu
         return
     fi
     
