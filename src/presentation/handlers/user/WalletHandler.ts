@@ -146,7 +146,8 @@ export class WalletHandler {
             if (!ctx.from) return;
 
             if (method === 'card') {
-                return await this.handleCardToCard(ctx, amount);
+                await this.handleCardToCard(ctx, amount);
+                return;
             }
 
             const user = await userRepo.findByChatId(BigInt(ctx.from.id));
@@ -195,7 +196,8 @@ export class WalletHandler {
             const cardOwner = config.CARD_OWNER || ''; // From env or settings if available
 
             if (!cardNumber) {
-                return ctx.reply('❌ شماره کارت تنظیم نشده است.');
+                await ctx.reply('❌ شماره کارت تنظیم نشده است.');
+                return;
             }
 
             // Start User Custom Flow for Card to Card
